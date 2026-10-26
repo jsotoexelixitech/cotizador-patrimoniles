@@ -105,3 +105,17 @@ describe('cotizarRc', () => {
     expect(e.prima).toBeCloseTo(p.prima * 0.6, 2);
   });
 });
+
+describe('Parámetros configurables', () => {
+  it('RCG: la prima mínima y los factores salen de los parámetros', async () => {
+    const { PARAMETROS_RCG } = await import('./rcg');
+    const p = { ...PARAMETROS_RCG, primaMinimaDivisa: 100, factoresOpciones: [1, 1.5, 2] };
+    expect(alternativasRcg(5000, 0.1, 'USD', p).map((a) => [a.limite, a.prima])).toEqual([[5000, 100], [7500, 150], [10000, 200]]);
+  });
+
+  it('RCP: la prima mínima y los montos por empleado salen de los parámetros', async () => {
+    const { PARAMETROS_RC } = await import('./rcp-rce');
+    const p = { ...PARAMETROS_RC, opcionesRcp: PARAMETROS_RC.opcionesRcp.map((o) => ({ ...o, medica: o.medica * 2 })) };
+    expect(opcionesRcp(120000, 10, 1, 0, true, false, p).map((x) => x.prima)).toEqual([1500, 1800, 2700]);
+  });
+});

@@ -37,3 +37,20 @@ npm run build    # dist/ ; VITE_APP_BASE=/cotizador-rc/ para servirlo bajo subpa
 - Emisión: RCG = ramo 28 / producto 89 en Sis2000 (planes PLANI, PLANII, PLAN3, IGEMA). Falta habilitar los planes del producto y el endpoint de emisión patrimonial.
 - Confirmar con La Mundial el mínimo en Bs (35 % de la suma) y el producto/ramo de RCP y RCE en Sis2000.
 - PDF oficial con membrete (hoy: imprimir / guardar PDF desde el navegador), correlativo y envío por correo.
+
+## Parámetros configurables
+
+Botón **Parámetros** (cabecera): rangos de tasa por clase, índoles, límites, multiplicadores de opciones, primas mínimas,
+sublímites, coberturas, condiciones, deducible y actividades restringidas (RCG); prima mínima, salario mínimo, opciones
+I/II/III, reglas en Bs, 11 clases y 344 actividades con sus equivalencias (RCP/RCE).
+
+- Se guardan en el navegador (`localStorage`, clave `cotizador-rc.parametros`) y se pueden exportar/importar en JSON.
+- "Restaurar oficiales" vuelve a la tarifa de La Mundial (`PARAMETROS_RCG` / `PARAMETROS_RC`).
+- Pendiente: publicarlos desde nest-api para que todos los usuarios usen la misma tarifa.
+
+## PDF de cotización RCG
+
+`src/pdf/cotizacionRcgPdf.ts` (pdf-lib): 2 páginas de cotización + 3 de la Solicitud de Seguro RCG con los datos,
+las coberturas marcadas y el intermediario, igual que el documento de La Mundial. Logo, sello y plantilla de la
+solicitud en `src/pdf/assets/` (extraídos del cotizador Apps Script). El N.º es provisional hasta tener el correlativo
+oficial desde el backend.

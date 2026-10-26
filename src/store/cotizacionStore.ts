@@ -1,10 +1,11 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { numeroONulo } from '../tarifas/comun';
-import { cotizarRcg, RCG_CLASES, tasaPromedio, type MonedaRcg, type SolicitudRcg } from '../tarifas/rcg';
+import { cotizarRcg, tasaPromedio, type MonedaRcg, type SolicitudRcg } from '../tarifas/rcg';
 import {
-  cotizarRc, TARIFA, type BaseNomina, type IdOpcion, type Modo, type MonedaRc, type ProductoEntrada, type SolicitudRc,
+  cotizarRc, opcionalesDe, type BaseNomina, type IdOpcion, type Modo, type MonedaRc, type ProductoEntrada, type SolicitudRc,
 } from '../tarifas/rcp-rce';
+import { useParametrosStore } from './parametrosStore';
 
 export type Producto = 'rcg' | 'rc';
 export type K = 'p' | 'e';
@@ -42,7 +43,7 @@ export interface CotizacionState {
 
 const productoInicial = (k: K): ProductoForm => ({
   tasa: '', ajuste: '0', opcion: 'I', adicionales: k === 'p' ? [false, false] : [false, false, false],
-  opcionalesVes: TARIFA[k].options.map((o) => ({
+  opcionalesVes: opcionalesDe(k, useParametrosStore.getState().rc).map((o) => ({
     seleccionada: false, tasa: String(o[1]), limite: /m[eé]dic/i.test(o[0]) ? '1000' : '650', grupo: '2000',
   })),
 });
@@ -51,7 +52,7 @@ const inicial = () => ({
   producto: null,
   comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '' },
   contrato: { esContrato: false, numero: '', objeto: '', coasegurado: '', vigencia: 'Anual' },
-  rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: String(tasaPromedio(RCG_CLASES[0])), condiciones: [], opcion: 'I' as const },
+  rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: useParametrosStore.getState().rcg.clases[0] ? String(tasaPromedio(useParametrosStore.getState().rcg.clases[0])) : '', condiciones: [], opcion: 'I' as const },
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
     claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
@@ -106,10 +107,12 @@ function solicitudRc(s: CotizacionState): SolicitudRc {
 
 export function useCotizacionRcg() {
   const s = useCotizacionStore();
-  return useMemo(() => cotizarRcg(solicitudRcg(s)), [s.comun, s.contrato, s.rcg]); // eslint-disable-line react-hooks/exhaustive-deps
+  const p = useParametrosStore((x) => x.rcg);
+  return useMemo(() => cotizarRcg(solicitudRcg(s), p), [s.comun, s.contrato, s.rcg, p]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 export function useCotizacionRc() {
   const s = useCotizacionStore();
-  return useMemo(() => cotizarRc(solicitudRc(s)), [s.comun, s.contrato, s.rc]); // eslint-disable-line react-hooks/exhaustive-deps
+  const p = useParametrosStore((x) => x.rc);
+  return useMemo(() => cotizarRc(solicitudRc(s), p), [s.comun, s.contrato, s.rc, p]); // eslint-disable-line react-hooks/exhaustive-deps
 }

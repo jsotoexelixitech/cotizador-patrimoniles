@@ -5,8 +5,9 @@ import { SectionCard } from '../components/ui/SectionCard';
 import { Field, Input, Select } from '../components/ui/FormField';
 import { StepActions } from '../components/ui/StepActions';
 import { importe, porcentaje } from '../tarifas/comun';
-import { CLASE_INDUSTRIAS, INDOLE_OTRA, RCG_CLASES, RCG_INDUSTRIAS, RCG_RESTRINGIDAS, tasaPromedio } from '../tarifas/rcg';
-import { actividadesDeClase, TARIFA, tasaMedia, type BaseNomina, type MonedaRc } from '../tarifas/rcp-rce';
+import { INDOLE_OTRA, tasaPromedio } from '../tarifas/rcg';
+import { useParametrosStore } from '../store/parametrosStore';
+import { actividadesDeClase, tasaMedia, type BaseNomina, type MonedaRc } from '../tarifas/rcp-rce';
 import { claseRc, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
 import { toast } from '../store/toastStore';
 
@@ -16,11 +17,12 @@ export function RiesgoStep() {
 }
 
 function RiesgoRcg() {
+  const prm = useParametrosStore((s) => s.rcg);
   const rcg = useCotizacionStore((s) => s.rcg);
   const setRcg = useCotizacionStore((s) => s.setRcg);
   const cot = useCotizacionRcg();
   const [intento, setIntento] = useState(false);
-  const clase = RCG_CLASES[rcg.clase];
+  const clase = prm.clases[rcg.clase] ?? prm.clases[0];
   const err = (k: 'indole' | 'actividadEspecifica') => (intento || rcg[k] ? cot.errores[k] : undefined);
 
   return (
@@ -30,9 +32,9 @@ function RiesgoRcg() {
           <Field label="Clase de riesgo" full hint={`Rango de tasa: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`}>
             <Select value={rcg.clase} onChange={(e) => {
               const i = Number(e.target.value);
-              setRcg({ clase: i, tasa: String(tasaPromedio(RCG_CLASES[i])) });
+              setRcg({ clase: i, tasa: String(tasaPromedio(prm.clases[i])) });
             }}>
-              {RCG_CLASES.map((c, i) => <option key={c.nombre} value={i}>{c.etiqueta} ({c.min.toFixed(2)} % – {c.max.toFixed(2)} %)</option>)}
+              {prm.clases.map((c, i) => <option key={c.nombre} value={i}>{c.etiqueta} ({c.min.toFixed(2)} % – {c.max.toFixed(2)} %)</option>)}
             </Select>
           </Field>
           <Field label="Índole específica" full error={err('indole')}
@@ -44,10 +46,10 @@ function RiesgoRcg() {
                 <option value={INDOLE_OTRA}>{INDOLE_OTRA}</option>
               </optgroup>
               <optgroup label="Clasificación obligatoria: Industrias">
-                {RCG_INDUSTRIAS.map((v) => <option key={v} value={v}>{v}{rcg.clase !== CLASE_INDUSTRIAS ? ' (requiere clase Industrias)' : ''}</option>)}
+                {prm.industrias.map((v) => <option key={v} value={v}>{v}{!clase.industria ? ' (requiere clase Industrias)' : ''}</option>)}
               </optgroup>
               <optgroup label="Restringidas — cotización por Área Técnica">
-                {RCG_RESTRINGIDAS.map((v) => <option key={v} value={v}>⛔ {v}</option>)}
+                {prm.restringidas.map((v) => <option key={v} value={v}>⛔ {v}</option>)}
               </optgroup>
             </Select>
           </Field>
@@ -71,6 +73,7 @@ function RiesgoRcg() {
 }
 
 function RiesgoRc() {
+  const prmRc = useParametrosStore((s) => s.rc);
   const rc = useCotizacionStore((s) => s.rc);
   const setRc = useCotizacionStore((s) => s.setRc);
   const setRcProducto = useCotizacionStore((s) => s.setRcProducto);
@@ -80,14 +83,14 @@ function RiesgoRc() {
   const clase = claseRc(rc);
   const ves = rc.moneda === 'VES';
   const simbolo = ves ? 'Bs' : rc.moneda;
-  const actividades = useMemo(() => (clase === null ? [] : actividadesDeClase(clase)), [clase]);
-  const filtradas = actividades.filter((i) => !filtro || TARIFA.e.risks[i][0].toLowerCase().includes(filtro.toLowerCase()));
-  const actividad = rc.actividad === '' ? null : TARIFA.e.risks[Number(rc.actividad)];
+  const actividades = useMemo(() => (clase === null ? [] : actividadesDeClase(clase, prmRc)), [clase, prmRc]);
+  const filtradas = actividades.filter((i) => !filtro || prmRc.actividades[i][0].toLowerCase().includes(filtro.toLowerCase()));
+  const actividad = rc.actividad === '' ? null : prmRc.actividades[Number(rc.actividad)];
 
   // Al cambiar clase/actividad se propone la tasa media del rango (igual que el original).
   const aplicarClase = (c: number | null) => {
     setRc({ actividad: '' });
-    setRcProducto('p', { tasa: c === null ? '' : String(tasaMedia(TARIFA.p.risks[c])) });
+    setRcProducto('p', { tasa: c === null ? '' : String(tasaMedia(prmRc.clases[c])) });
     setRcProducto('e', { tasa: '' });
   };
 
@@ -98,14 +101,14 @@ function RiesgoRc() {
           <Field label="Índole (descripción de la actividad)" full>
             <Input value={rc.indole} onChange={(e) => setRc({ indole: e.target.value })} placeholder="Ej. Venta de repuestos automotrices" />
           </Field>
-          <Field label="Clase común" full hint={clase !== null ? `Patronal: ${porcentaje(TARIFA.p.risks[clase][1])} – ${porcentaje(TARIFA.p.risks[clase][2])}` : undefined}>
+          <Field label="Clase común" full hint={clase !== null ? `Patronal: ${porcentaje(prmRc.clases[clase][1])} – ${porcentaje(prmRc.clases[clase][2])}` : undefined}>
             <Select value={rc.claseSel} onChange={(e) => {
               const v = e.target.value;
               setRc({ claseSel: v, claseRelacionada: '' });
               aplicarClase(v === '' || v === 'other' ? null : Number(v));
             }}>
               <option value="">Selecciona una clase</option>
-              {TARIFA.p.risks.map((r, i) => <option key={r[0]} value={i}>{i + 1}. {r[0]}</option>)}
+              {prmRc.clases.map((r, i) => <option key={r[0]} value={i}>{i + 1}. {r[0]}</option>)}
               <option value="other">12. Otras (especificar)</option>
             </Select>
           </Field>
@@ -113,7 +116,7 @@ function RiesgoRc() {
             <Field label="Clase relacionada" full>
               <Select value={rc.claseRelacionada} onChange={(e) => { setRc({ claseRelacionada: e.target.value }); aplicarClase(e.target.value === '' ? null : Number(e.target.value)); }}>
                 <option value="">Selecciona la clase más parecida</option>
-                {TARIFA.p.risks.map((r, i) => <option key={r[0]} value={i}>{i + 1}. {r[0]}</option>)}
+                {prmRc.clases.map((r, i) => <option key={r[0]} value={i}>{i + 1}. {r[0]}</option>)}
               </Select>
             </Field>
           )}
@@ -130,10 +133,10 @@ function RiesgoRc() {
                 error={intento && rc.actividad === '' ? 'Selecciona una actividad vinculada a la clase.' : undefined}>
                 <Select value={rc.actividad} onChange={(e) => {
                   setRc({ actividad: e.target.value });
-                  setRcProducto('e', { tasa: e.target.value === '' ? '' : String(tasaMedia(TARIFA.e.risks[Number(e.target.value)])) });
+                  setRcProducto('e', { tasa: e.target.value === '' ? '' : String(tasaMedia(prmRc.actividades[Number(e.target.value)])) });
                 }}>
                   <option value="">Selecciona la actividad</option>
-                  {filtradas.map((i) => <option key={i} value={i}>{TARIFA.e.risks[i][0]}</option>)}
+                  {filtradas.map((i) => <option key={i} value={i}>{prmRc.actividades[i][0]}</option>)}
                 </Select>
               </Field>
             </>

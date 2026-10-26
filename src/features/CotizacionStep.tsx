@@ -7,8 +7,9 @@ import { Aviso } from '../components/ui/Aviso';
 import { Badge } from '../components/ui/Badge';
 import { cn } from '../lib/utils';
 import { importe, porcentaje } from '../tarifas/comun';
-import { MONEDAS_RCG, RCG_CLASES, RCG_CONDICIONES, type MonedaRcg } from '../tarifas/rcg';
-import { COBERTURAS_BASICAS, NOMBRES, TARIFA, type IdOpcion } from '../tarifas/rcp-rce';
+import { MONEDAS_RCG, type MonedaRcg } from '../tarifas/rcg';
+import { COBERTURAS_BASICAS, NOMBRES, opcionalesDe, type IdOpcion, type ParametrosRc } from '../tarifas/rcp-rce';
+import { useParametrosStore } from '../store/parametrosStore';
 import { useCotizacionRc, useCotizacionRcg, useCotizacionStore, type K } from '../store/cotizacionStore';
 import { toast } from '../store/toastStore';
 
@@ -61,13 +62,15 @@ function Casilla({ checked, onChange, children, detalle }: { checked: boolean; o
 }
 
 function CotizacionRcg() {
+  const prm = useParametrosStore((s) => s.rcg);
   const rcg = useCotizacionStore((s) => s.rcg);
   const esContrato = useCotizacionStore((s) => s.contrato.esContrato);
   const setRcg = useCotizacionStore((s) => s.setRcg);
   const cot = useCotizacionRcg();
   const [intento, setIntento] = useState(false);
-  const clase = RCG_CLASES[rcg.clase];
+  const clase = prm.clases[rcg.clase] ?? prm.clases[0];
   const m = (n: number) => `${rcg.moneda} ${importe(n)}`;
+  const miles = (n: number) => n.toLocaleString('es-VE');
   const opcionValida = cot.alternativas.some((a) => a.opcion === rcg.opcion);
 
   return (
@@ -79,8 +82,8 @@ function CotizacionRcg() {
               {MONEDAS_RCG.map((x) => <option key={x} value={x}>{x}</option>)}
             </Select>
           </Field>
-          <Field label="Límite de responsabilidad" hint="Entre 5.000 y 1.000.000 (opción I)." error={intento || rcg.limite ? cot.errores.limite : undefined}>
-            <Input type="number" min={5000} max={1000000} step="0.01" value={rcg.limite} onChange={(e) => setRcg({ limite: e.target.value })} placeholder="Ej. 50000" />
+          <Field label="Límite de responsabilidad" hint={`Entre ${miles(prm.limiteMin)} y ${miles(prm.limiteMax)} (opción I).`} error={intento || rcg.limite ? cot.errores.limite : undefined}>
+            <Input type="number" min={prm.limiteMin} max={prm.limiteMax} step="0.01" value={rcg.limite} onChange={(e) => setRcg({ limite: e.target.value })} placeholder="Ej. 50000" />
           </Field>
           <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
             <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
@@ -88,7 +91,7 @@ function CotizacionRcg() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Elige la opción" description="Opciones I, II y III: límite ×1, ×2 y ×3 (tope 1.000.000)." Icon={ShieldCheck}>
+      <SectionCard title="Elige la opción" description={`Opciones I, II y III: límite ×${prm.factoresOpciones.join(', ×')} (tope ${miles(prm.limiteMax)}).`} Icon={ShieldCheck}>
         {cot.alternativas.length === 0 ? (
           <p className="text-sm text-slate-500">Ingresa un límite y una tasa válidos para ver las primas.</p>
         ) : (
@@ -113,12 +116,12 @@ function CotizacionRcg() {
 
       <SectionCard title="Condiciones especiales" description={esContrato ? 'Selecciona las que correspondan al contrato.' : 'Las condiciones adicionales solo se habilitan con contrato.'} Icon={Stamp}>
         <div className="space-y-2">
-          {esContrato && RCG_CONDICIONES.slice(0, 4).map((c, i) => (
+          {esContrato && prm.condicionesOpcionales.map((c, i) => (
             <Casilla key={c} checked={rcg.condiciones.includes(i)}
               onChange={(v) => setRcg({ condiciones: v ? [...rcg.condiciones, i] : rcg.condiciones.filter((x) => x !== i) })}>{c}</Casilla>
           ))}
           <div className="flex items-start gap-2 text-[0.78rem] text-slate-600 bg-slate-50 rounded-xl px-3.5 py-3 border border-slate-200">
-            <Badge tone="indigo">Siempre</Badge><span>{RCG_CONDICIONES[4]}</span>
+            <Badge tone="indigo">Siempre</Badge><span>{prm.condicionFija}</span>
           </div>
         </div>
       </SectionCard>
@@ -157,19 +160,23 @@ export function TablaCoberturas({ cot }: { cot: ReturnType<typeof useCotizacionR
   );
 }
 
-const ADICIONALES: Record<K, { nombre: string; porEmpleado: string }[]> = {
-  p: [
-    { nombre: 'Gastos por asistencia médica, quirúrgica y farmacéutica', porEmpleado: 'Por empleado: I 15 · II 30 · III 75' },
-    { nombre: 'Hernia', porEmpleado: 'Por empleado: I 7,50 · II 15 · III 37,50' },
-  ],
-  e: [
-    { nombre: 'Negligencia del Empleador', porEmpleado: 'Por empleado: I 2 · II 4 · III 10' },
-    { nombre: 'Asistencia Legal y Defensa Penal', porEmpleado: 'Por empleado: I 3 · II 6 · III 15' },
-    { nombre: 'Gastos Médicos', porEmpleado: 'Por empleado: I 6 · II 10 · III 20' },
-  ],
-};
+/** Coberturas adicionales por empleado (USD/EUR) con los montos de los parámetros. */
+function adicionales(k: K, p: ParametrosRc): { nombre: string; porEmpleado: string }[] {
+  const por = (f: (i: number) => number) => 'Por empleado: ' + ['I', 'II', 'III'].map((id, i) => `${id} ${importe(f(i))}`).join(' · ');
+  return k === 'p'
+    ? [
+        { nombre: 'Gastos por asistencia médica, quirúrgica y farmacéutica', porEmpleado: por((i) => p.opcionesRcp[i]?.medica ?? 0) },
+        { nombre: 'Hernia', porEmpleado: por((i) => p.opcionesRcp[i]?.hernia ?? 0) },
+      ]
+    : [
+        { nombre: 'Negligencia del Empleador', porEmpleado: por((i) => p.opcionesRce[i]?.negligencia ?? 0) },
+        { nombre: 'Asistencia Legal y Defensa Penal', porEmpleado: por((i) => p.opcionesRce[i]?.defensa ?? 0) },
+        { nombre: 'Gastos Médicos', porEmpleado: por((i) => p.opcionesRce[i]?.medica ?? 0) },
+      ];
+}
 
 function CotizacionRc() {
+  const prmRc = useParametrosStore((s) => s.rc);
   const rc = useCotizacionStore((s) => s.rc);
   const setRcProducto = useCotizacionStore((s) => s.setRcProducto);
   const cot = useCotizacionRc();
@@ -203,13 +210,16 @@ function CotizacionRc() {
                 <p className="text-[0.78rem] font-bold text-slate-600 tracking-wide mb-2">Coberturas adicionales</p>
                 <div className="grid sm:grid-cols-2 gap-2">
                   {!ves
-                    ? ADICIONALES[r.k].map((a, i) => (
+                    ? adicionales(r.k, prmRc).map((a, i) => (
                         <Casilla key={a.nombre} checked={x.adicionales[i]} detalle={a.porEmpleado}
                           onChange={(v) => setRcProducto(r.k, { adicionales: x.adicionales.map((y, j) => (j === i ? v : y)) })}>{a.nombre}</Casilla>
                       ))
-                    : TARIFA[r.k].options.map((o, i) => {
-                        const op = x.opcionalesVes[i];
-                        const cambiar = (c: Partial<typeof op>) => setRcProducto(r.k, { opcionalesVes: x.opcionalesVes.map((v, j) => (j === i ? { ...v, ...c } : v)) });
+                    : opcionalesDe(r.k, prmRc).map((o, i, lista) => {
+                        const vacio = (rg: typeof o) => ({ seleccionada: false, tasa: String(rg[1]), limite: /m[eé]dic/i.test(rg[0]) ? '1000' : '650', grupo: '2000' });
+                        const op = x.opcionalesVes[i] ?? vacio(o);
+                        const cambiar = (c: Partial<typeof op>) => setRcProducto(r.k, {
+                          opcionalesVes: lista.map((oo, j) => (j === i ? { ...op, ...c } : x.opcionalesVes[j] ?? vacio(oo))),
+                        });
                         const restringida = /Negligencia|Defensa Penal/i.test(o[0]);
                         const medica = /m[eé]dic/i.test(o[0]);
                         return (

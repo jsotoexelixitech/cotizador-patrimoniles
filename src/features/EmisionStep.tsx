@@ -1,5 +1,7 @@
-import type { ReactNode } from 'react';
-import { Download, FileCheck2, Lock, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
+import { useState, type ReactNode } from 'react';
+import { Download, FileCheck2, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
+import { useParametrosStore } from '../store/parametrosStore';
+import { toast } from '../store/toastStore';
 import { SectionCard } from '../components/ui/SectionCard';
 import { StepActions } from '../components/ui/StepActions';
 import { Button } from '../components/ui/Button';
@@ -24,8 +26,34 @@ export function EmisionStep() {
   const resetWizard = useWizardStore((w) => w.reset);
   const { comun: c, contrato: k } = s;
   const rcg = s.producto === 'rcg';
+  const cotRcg = useCotizacionRcg();
+  const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
+  const [generando, setGenerando] = useState(false);
+  // Número provisional hasta tener el correlativo oficial desde el backend.
+  const [numero] = useState(() => `RCG-${new Date().getFullYear()}-P${String(Date.now()).slice(-6)}`);
 
   const nueva = () => { s.reset(); resetWizard(); window.scrollTo({ top: 0 }); };
+
+  const descargarRcg = async () => {
+    setGenerando(true);
+    try {
+      // pdf-lib y las imágenes de la solicitud se cargan solo al generar el PDF.
+      const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const bytes = await generarPdfRcg({
+        numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: s.rcg.moneda,
+        indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
+        ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
+        sucursal: c.sucursal, elaboradoPor: c.emisor, alternativas: cotRcg.alternativas, coberturas: cotRcg.coberturas,
+        deducible: cotRcg.deducible, notaIgtf: cotRcg.notaIgtf, condiciones: cotRcg.condiciones, vigenciaDias,
+      }, await cargarAssetsRcg());
+      descargarPdf(bytes, `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`);
+      toast.success('Cotización descargada', `${numero} · 2 páginas de cotización + Solicitud de Seguro.`);
+    } catch (e) {
+      toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerando(false);
+    }
+  };
 
   return (
     <div className="space-y-5">
@@ -60,14 +88,24 @@ export function EmisionStep() {
         </div>
       </SectionCard>
 
-      <p className="text-[0.72rem] text-slate-500">Cotización válida por quince (15) días continuos. No constituye emisión de póliza ni activación de cobertura.</p>
+      <p className="text-[0.72rem] text-slate-500">
+        Cotización válida por {rcg ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
+        {rcg && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
+      </p>
 
       <StepActions continueLabel="" extra={(
         <>
-          <Button variant="secondary" size="lg" onClick={() => window.print()}>
-            <Download size={15} />
-            Descargar / imprimir cotización
-          </Button>
+          {rcg ? (
+            <Button variant="primary" size="lg" onClick={descargarRcg} disabled={generando}>
+              {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+              {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
+            </Button>
+          ) : (
+            <Button variant="secondary" size="lg" onClick={() => window.print()}>
+              <Printer size={15} />
+              Imprimir / guardar PDF
+            </Button>
+          )}
           <Button variant="ghost" size="lg" onClick={nueva}>
             <RotateCcw size={15} />
             Nueva cotización
