@@ -197,8 +197,11 @@ export interface ResultadoProducto {
   nota: string;
 }
 
+export type PasoRc = "tomador" | "riesgo" | "cotizacion";
+
 export interface CotizacionRc {
   errores: string[];
+  erroresPorPaso: Record<PasoRc, string[]>;
   avisos: string[];
   nomina: number;
   anualPorTrabajador: number | null;
@@ -214,6 +217,8 @@ const esMedica = (nombre: string) => /m[eé]dic/i.test(nombre);
 
 export function cotizarRc(s: SolicitudRc): CotizacionRc {
   const errores: string[] = [];
+  const erroresPorPaso: Record<PasoRc, string[]> = { tomador: [], riesgo: [], cotizacion: [] };
+  const falla = (paso: PasoRc, msg: string) => { errores.push(msg); erroresPorPaso[paso].push(msg); };
   const avisos: string[] = [];
   const ves = s.moneda === 'VES';
   const fx = ves ? (s.tasaBcv ?? 0) : 1;
@@ -221,18 +226,18 @@ export function cotizarRc(s: SolicitudRc): CotizacionRc {
   const monedaBase = s.moneda === 'EUR' ? 'EUR' : 'USD';
   const activos: ('p' | 'e')[] = s.modo === 'both' ? ['p', 'e'] : [s.modo];
 
-  if (!s.asegurado.trim()) errores.push('Indica el tomador / asegurado.');
-  if (!s.rif.trim()) errores.push('Indica el RIF del tomador.');
-  if (!s.direccion.trim()) errores.push('Indica la ubicación del riesgo.');
-  if (!SUCURSALES.includes(s.sucursal)) errores.push('Selecciona una sucursal válida de la lista.');
-  if (!s.emisor.trim()) errores.push('Indica quién emite la cotización.');
-  if (!CORREO_RE.test(s.correoEmisor.trim())) errores.push('Introduce el correo de quien emite la cotización.');
-  if (s.correo && !CORREO_RE.test(s.correo.trim())) errores.push('Introduce un correo electrónico válido.');
-  if (s.indole.trim().length < 3) errores.push('Escribe la índole con al menos tres caracteres.');
-  if (s.actividad === null) errores.push('Selecciona una Actividad del Riesgo vinculada a la clase.');
-  if (ves && !(fx > 0)) errores.push('Se requiere una tasa BCV válida para cotizar en bolívares.');
+  if (!s.asegurado.trim()) falla("tomador", 'Indica el tomador / asegurado.');
+  if (!s.rif.trim()) falla("tomador", 'Indica el RIF del tomador.');
+  if (!s.direccion.trim()) falla("tomador", 'Indica la ubicación del riesgo.');
+  if (!SUCURSALES.includes(s.sucursal)) falla("tomador", 'Selecciona una sucursal válida de la lista.');
+  if (!s.emisor.trim()) falla("tomador", 'Indica quién emite la cotización.');
+  if (!CORREO_RE.test(s.correoEmisor.trim())) falla("tomador", 'Introduce el correo de quien emite la cotización.');
+  if (s.correo && !CORREO_RE.test(s.correo.trim())) falla("tomador", 'Introduce un correo electrónico válido.');
+  if (s.indole.trim().length < 3) falla("riesgo", 'Escribe la índole con al menos tres caracteres.');
+  if (s.actividad === null) falla("riesgo", 'Selecciona una Actividad del Riesgo vinculada a la clase.');
+  if (ves && !(fx > 0)) falla("riesgo", 'Se requiere una tasa BCV válida para cotizar en bolívares.');
   if (s.esContrato && (!s.numeroContrato.trim() || !s.objetoContrato.trim() || !VIGENCIAS_CONTRATO.includes(s.vigenciaContrato))) {
-    errores.push('Completa el número de contrato, la vigencia y el objeto de la obra.');
+    falla("tomador", 'Completa el número de contrato, la vigencia y el objeto de la obra.');
   }
 
   const montoIngresado = s.monto ?? 0;
@@ -242,10 +247,10 @@ export function cotizarRc(s: SolicitudRc): CotizacionRc {
   const derivados = limitesPorTrabajador(pago, empleados, s.base);
 
   if (!ves && pago > 0 && derivados && derivados.anualPorTrabajador < SALARIO_MIN_ANUAL) {
-    errores.push(`El salario anual promedio por empleado no puede ser inferior a ${monedaBase} 1.800.`);
+    falla("riesgo", `El salario anual promedio por empleado no puede ser inferior a ${monedaBase} 1.800.`);
   }
   if (!(pago > 0) || !(empleados >= 1) || !Number.isInteger(empleados)) {
-    errores.push('Ingresa un monto anual positivo y una cantidad entera de empleados.');
+    falla("riesgo", 'Ingresa un monto anual positivo y una cantidad entera de empleados.');
   }
 
   const resultados: ResultadoProducto[] = [];
@@ -257,9 +262,9 @@ export function cotizarRc(s: SolicitudRc): CotizacionRc {
     const ajuste = ent.ajuste ?? NaN;
     const tope = limitesAutorizados(s.moneda, k);
 
-    if (!riesgo) errores.push(`${etiqueta}: completa la clasificación común.`);
-    else if (!tasaValida(ent.tasa, riesgo[1], riesgo[2])) errores.push(`${etiqueta}: tasa permitida ${riesgo[1]} % a ${riesgo[2]} %.`);
-    if (!tasaValida(ent.ajuste, -10, 10)) errores.push(`${etiqueta}: el ajuste debe estar entre −10 % y +10 %.`);
+    if (!riesgo) falla("riesgo", `${etiqueta}: completa la clasificación común.`);
+    else if (!tasaValida(ent.tasa, riesgo[1], riesgo[2])) falla("cotizacion", `${etiqueta}: tasa permitida ${riesgo[1]} % a ${riesgo[2]} %.`);
+    if (!tasaValida(ent.ajuste, -10, 10)) falla("cotizacion", `${etiqueta}: el ajuste debe estar entre −10 % y +10 %.`);
     if (ajuste < 0) avisos.push(`${etiqueta}: descuento sujeto a validación del área técnica.`);
 
     const lineas = [{ nombre: 'Cobertura básica', tasa, min: riesgo?.[1], max: riesgo?.[2] }];
@@ -292,19 +297,19 @@ export function cotizarRc(s: SolicitudRc): CotizacionRc {
         if (!op?.seleccionada) return;
         // En RCE las tasas opcionales quedan fijas en el mínimo del rango.
         const tasaOp = k === 'e' ? o[1] : op.tasa ?? NaN;
-        if (!tasaValida(tasaOp, o[1], o[2])) errores.push(`${o[0]}: tasa permitida ${o[1]} % a ${o[2]} %.`);
+        if (!tasaValida(tasaOp, o[1], o[2])) falla("cotizacion", `${o[0]}: tasa permitida ${o[1]} % a ${o[2]} %.`);
         if (esRestringida(o[0])) {
           const lr = limitesOpcionalesRestringidos(limites[0]);
-          if (!lr || !(lr.colectivo > 0 && lr.colectivo <= tope.opcional)) errores.push(`${o[0]}: revisa los límites individual y colectivo.`);
+          if (!lr || !(lr.colectivo > 0 && lr.colectivo <= tope.opcional)) falla("cotizacion", `${o[0]}: revisa los límites individual y colectivo.`);
         } else if (op.limite === 'tech') {
-          errores.push(`${o[0]}: límite superior a ${monedaBase} 2.000; contactar al área técnica.`);
+          falla("cotizacion", `${o[0]}: límite superior a ${monedaBase} 2.000; contactar al área técnica.`);
         } else if (!(Number(op.limite) > 0) || !((op.grupo ?? 0) >= Number(op.limite))) {
-          errores.push(`${o[0]}: revisa los límites individual y colectivo.`);
+          falla("cotizacion", `${o[0]}: revisa los límites individual y colectivo.`);
         }
         lineas.push({ nombre: o[0], tasa: tasaOp, min: o[1], max: o[2] });
       });
       if (derivados && (limites[0] > tope.individual || limites[1] > tope.colectivo)) {
-        errores.push(`${NOMBRES[k]}: se exceden los límites autorizados. Solicitar al área técnica.`);
+        falla("cotizacion", `${NOMBRES[k]}: se exceden los límites autorizados. Solicitar al área técnica.`);
       }
       const tasaTotal = lineas.reduce((acc, l) => acc + l.tasa, 0);
       primaCalculada = (nomina * tasaTotal * (1 + ajuste / 100)) / 100;
@@ -313,7 +318,7 @@ export function cotizarRc(s: SolicitudRc): CotizacionRc {
     }
 
     if (limites.some((n) => !(n > 0)) || limites[1] < limites[0] || limites[2] < limites[1]) {
-      errores.push(`${etiqueta}: los límites deben ser positivos y crecientes.`);
+      falla("cotizacion", `${etiqueta}: los límites deben ser positivos y crecientes.`);
     }
     const tasaTotal = lineas.reduce((acc, l) => acc + l.tasa, 0);
     if (lineas.some((l) => l.min !== undefined && (l.tasa * (1 + ajuste / 100) < l.min - 1e-9 || l.tasa * (1 + ajuste / 100) > l.max! + 1e-9))) {
@@ -346,6 +351,7 @@ export function cotizarRc(s: SolicitudRc): CotizacionRc {
 
   return {
     errores,
+    erroresPorPaso,
     avisos,
     nomina: enMoneda(nomina),
     anualPorTrabajador: derivados ? enMoneda(derivados.anualPorTrabajador) : null,

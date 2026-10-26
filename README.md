@@ -5,7 +5,7 @@ Reemplaza los dos cotizadores de Google Apps Script con las mismas fórmulas.
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173  (?producto=rcp abre RCP/RCE)
+npm run dev      # http://localhost:5180
 npm test         # pruebas del motor de tarifas
 npm run build    # dist/ ; VITE_APP_BASE=/cotizador-rc/ para servirlo bajo subpath
 ```
@@ -15,7 +15,7 @@ npm run build    # dist/ ; VITE_APP_BASE=/cotizador-rc/ para servirlo bajo subpa
 - `src/tarifas/` — motor puro (sin React), pensado para moverlo luego a nest-api.
   - `rcg.ts` — portado del `.gs` RCG (`TRES-ALTERNATIVAS-USD-EUR-SIEMPRE-10-15-PRUEBA-6`).
   - `rcp-rce.ts` + `data/` — tabla `TARIFF` (11 clases, 344 actividades RCE) y `EQUIVALENCE` del cotizador RCP/RCE.
-- `src/components/` — pantallas.
+- `src/components/` + `src/features/` — UI sobre la plantilla homologada RCV (`exelixi-modulos/plantilla-modulo-react`): aurora, stepper píldora, SectionCard, Poppins y paleta La Mundial. Flujo: Producto → Tomador → Riesgo → Cotización → Emisión.
 
 ## Reglas RCG
 

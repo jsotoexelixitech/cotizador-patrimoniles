@@ -1,0 +1,115 @@
+import { useMemo } from 'react';
+import { create } from 'zustand';
+import { numeroONulo } from '../tarifas/comun';
+import { cotizarRcg, RCG_CLASES, tasaPromedio, type MonedaRcg, type SolicitudRcg } from '../tarifas/rcg';
+import {
+  cotizarRc, TARIFA, type BaseNomina, type IdOpcion, type Modo, type MonedaRc, type ProductoEntrada, type SolicitudRc,
+} from '../tarifas/rcp-rce';
+
+export type Producto = 'rcg' | 'rc';
+export type K = 'p' | 'e';
+
+export interface ProductoForm {
+  tasa: string;
+  ajuste: string;
+  opcion: IdOpcion;
+  /** USD/EUR: RCP = [médica, hernia]; RCE = [negligencia, defensa, médica]. */
+  adicionales: boolean[];
+  /** Bs: coberturas opcionales por tasa (TARIFA[k].options). */
+  opcionalesVes: { seleccionada: boolean; tasa: string; limite: string; grupo: string }[];
+}
+
+export interface CotizacionState {
+  producto: Producto | null;
+  comun: {
+    asegurado: string; tipoDoc: string; documento: string; correo: string; intermediario: string; ubicacion: string;
+    sucursal: string; emisor: string; correoEmisor: string;
+  };
+  contrato: { esContrato: boolean; numero: string; objeto: string; coasegurado: string; vigencia: string };
+  rcg: { moneda: MonedaRcg; clase: number; indole: string; actividadEspecifica: string; limite: string; tasa: string; condiciones: number[]; opcion: 'I' | 'II' | 'III' };
+  rc: {
+    modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
+    claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
+  };
+  setProducto: (p: Producto) => void;
+  setComun: (c: Partial<CotizacionState['comun']>) => void;
+  setContrato: (c: Partial<CotizacionState['contrato']>) => void;
+  setRcg: (c: Partial<CotizacionState['rcg']>) => void;
+  setRc: (c: Partial<CotizacionState['rc']>) => void;
+  setRcProducto: (k: K, c: Partial<ProductoForm>) => void;
+  reset: () => void;
+}
+
+const productoInicial = (k: K): ProductoForm => ({
+  tasa: '', ajuste: '0', opcion: 'I', adicionales: k === 'p' ? [false, false] : [false, false, false],
+  opcionalesVes: TARIFA[k].options.map((o) => ({
+    seleccionada: false, tasa: String(o[1]), limite: /m[eé]dic/i.test(o[0]) ? '1000' : '650', grupo: '2000',
+  })),
+});
+
+const inicial = () => ({
+  producto: null,
+  comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '' },
+  contrato: { esContrato: false, numero: '', objeto: '', coasegurado: '', vigencia: 'Anual' },
+  rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: String(tasaPromedio(RCG_CLASES[0])), condiciones: [], opcion: 'I' as const },
+  rc: {
+    modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
+    claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
+  },
+});
+
+export const useCotizacionStore = create<CotizacionState>((set) => ({
+  ...inicial(),
+  setProducto: (producto) => set({ producto }),
+  setComun: (c) => set((s) => ({ comun: { ...s.comun, ...c } })),
+  setContrato: (c) => set((s) => ({ contrato: { ...s.contrato, ...c } })),
+  setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c } })),
+  setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c } })),
+  setRcProducto: (k, c) => set((s) => ({ rc: { ...s.rc, [k]: { ...s.rc[k], ...c } } })),
+  reset: () => set(inicial()),
+}));
+
+export const rifCompleto = (c: CotizacionState['comun']) => (c.documento ? `${c.tipoDoc}-${c.documento}` : '');
+
+function solicitudRcg(s: CotizacionState): SolicitudRcg {
+  const { comun: c, contrato: k, rcg: r } = s;
+  return {
+    sucursal: c.sucursal, usuario: c.emisor, correoUsuario: c.correoEmisor, asegurado: c.asegurado, rif: rifCompleto(c),
+    correoDestinatario: c.correo, intermediario: c.intermediario, ubicacion: c.ubicacion, moneda: r.moneda, clase: r.clase,
+    indole: r.indole, actividadEspecifica: r.actividadEspecifica, esContrato: k.esContrato, numeroContrato: k.numero,
+    objetoObra: k.objeto, coasegurado: k.coasegurado, limite: numeroONulo(r.limite), tasa: numeroONulo(r.tasa), condiciones: r.condiciones,
+  };
+}
+
+const aEntrada = (x: ProductoForm): ProductoEntrada => ({
+  tasa: numeroONulo(x.tasa), ajuste: numeroONulo(x.ajuste), opcion: x.opcion, adicionales: x.adicionales,
+  opcionalesVes: x.opcionalesVes.map((o) => ({ seleccionada: o.seleccionada, tasa: numeroONulo(o.tasa), limite: o.limite, grupo: numeroONulo(o.grupo) })),
+});
+
+export const claseRc = (rc: CotizacionState['rc']): number | null => {
+  const t = rc.claseSel === 'other' ? rc.claseRelacionada : rc.claseSel;
+  return t === '' ? null : Number(t);
+};
+
+function solicitudRc(s: CotizacionState): SolicitudRc {
+  const { comun: c, contrato: k, rc } = s;
+  return {
+    modo: rc.modo, moneda: rc.moneda, tasaBcv: numeroONulo(rc.tasaBcv), base: rc.base, monto: numeroONulo(rc.monto),
+    empleados: numeroONulo(rc.empleados), clase: claseRc(rc), otraClase: rc.claseSel === 'other',
+    actividad: rc.actividad === '' ? null : Number(rc.actividad), indole: rc.indole,
+    asegurado: c.asegurado, rif: rifCompleto(c), correo: c.correo, direccion: c.ubicacion, sucursal: c.sucursal,
+    emisor: c.emisor, correoEmisor: c.correoEmisor, intermediario: c.intermediario,
+    esContrato: k.esContrato, numeroContrato: k.numero, vigenciaContrato: k.vigencia, objetoContrato: k.objeto,
+    p: aEntrada(rc.p), e: aEntrada(rc.e),
+  };
+}
+
+export function useCotizacionRcg() {
+  const s = useCotizacionStore();
+  return useMemo(() => cotizarRcg(solicitudRcg(s)), [s.comun, s.contrato, s.rcg]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+export function useCotizacionRc() {
+  const s = useCotizacionStore();
+  return useMemo(() => cotizarRc(solicitudRc(s)), [s.comun, s.contrato, s.rc]); // eslint-disable-line react-hooks/exhaustive-deps
+}
