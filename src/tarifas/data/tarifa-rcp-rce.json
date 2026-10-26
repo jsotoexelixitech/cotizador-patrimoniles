@@ -1,0 +1,1814 @@
+{
+ "p": {
+  "risks": [
+   [
+    "Residenciales (personal doméstico)",
+    0.1,
+    1.25
+   ],
+   [
+    "Oficinas, Administradores, Institucionales",
+    0.25,
+    1.5
+   ],
+   [
+    "Comercios al Mayor y Detal (excluyendo depósitos)",
+    0.3,
+    3
+   ],
+   [
+    "Almacenes, Depósitos",
+    0.5,
+    3.5
+   ],
+   [
+    "Transportistas públicos y carga",
+    0.6,
+    4
+   ],
+   [
+    "Panaderías, Carnicerías, Charcuterías, Supermercados, Abastos",
+    0.6,
+    4
+   ],
+   [
+    "Talleres de reparación de vehículos, equipos y maquinarias industriales",
+    0.65,
+    4
+   ],
+   [
+    "Industriales de cualquier tipo",
+    0.7,
+    4
+   ],
+   [
+    "Construcción civil",
+    0.75,
+    4.5
+   ],
+   [
+    "Industria Petrolera (excluyendo operaciones de pozos petroleros)",
+    0.9,
+    5
+   ],
+   [
+    "Industria Petrolera (incluyendo operaciones de pozos petroleros)",
+    1.25,
+    7
+   ]
+  ],
+  "options": [
+   [
+    "Asistencia Médica, Quirúrgica y Farmacéutica",
+    0.5,
+    1.5
+   ],
+   [
+    "Hernias",
+    0.05,
+    0.75
+   ]
+  ]
+ },
+ "e": {
+  "risks": [
+   [
+    "ABASTO, CASA DE",
+    0.1,
+    0.2
+   ],
+   [
+    "ABOGADOS, OFICINA O BUFETES DE",
+    0.05,
+    0.1
+   ],
+   [
+    "ABONOS Y FERTILIZANTE, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ACCESORIOS Y REPUESTOS",
+    0.1,
+    0.2
+   ],
+   [
+    "REFINACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ACERO, INDUSTRIA DEL",
+    0.25,
+    0.5
+   ],
+   [
+    "ACIDOS, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ACUMULADORES, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ADHESIVOS, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "ADMINISTRACION (EMPLEADORES CUYAS ACTIVIDADES SON NETAMENTE DE OFIC",
+    0.05,
+    0.1
+   ],
+   [
+    "ADUANAS",
+    0.05,
+    0.15
+   ],
+   [
+    "AEREAS, LINEAS",
+    0.15,
+    0.25
+   ],
+   [
+    "AGRICULTURA",
+    0.25,
+    0.3
+   ],
+   [
+    "AGUAS, MINERALES Y GASEOSAS, FABRICACION Y EMBOTELLAMIENTO DE",
+    0.3,
+    0.6
+   ],
+   [
+    "AIRE ACONDICIONADO, FABRICACION Y REPARACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "ALBAÑILERIA",
+    0.35,
+    0.7
+   ],
+   [
+    "ALCOHOL, FABRICACION DE",
+    0.4,
+    0.8
+   ],
+   [
+    "ALFARERIA",
+    0.45,
+    0.9
+   ],
+   [
+    "ALFOMBRAS, Y LIMPIEZA DE",
+    0.1,
+    0.2
+   ],
+   [
+    "ALGODÓN PROCESAMIENTO DE",
+    0.15,
+    0.3
+   ],
+   [
+    "ALIMENTOS, FABRICACION DE",
+    0.1,
+    0.2
+   ],
+   [
+    "ALMACENES",
+    0.1,
+    0.2
+   ],
+   [
+    "ALMIDON, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ALPARGATAS, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ALUMINIO, INDUSTRIA DE",
+    0.45,
+    0.9
+   ],
+   [
+    "AMORTIGUADORES, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "ANTIGÜEDADES, TIENDAS DE RESTAURACION DE",
+    0.1,
+    0.2
+   ],
+   [
+    "ANTROPOLOGICAS, INVESTIGACIONES",
+    0.3,
+    0.6
+   ],
+   [
+    "ARCHIVO, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "ARENERAS",
+    0.25,
+    0.5
+   ],
+   [
+    "ARMERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "ARQUITECTURA, OFICINAS O EMPRESAS DE",
+    0.1,
+    0.15
+   ],
+   [
+    "ARROZ, PROCESAMIENTO DEL",
+    0.15,
+    0.3
+   ],
+   [
+    "ARTE, ESTUDIO O ESCUELA DE",
+    0.1,
+    0.15
+   ],
+   [
+    "ASBESTO, FABRICACION DE ARTICULOS DE",
+    1.5,
+    3
+   ],
+   [
+    "ASCENSORES, FABRICACION Y REPARACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "ASERRADERO",
+    0.45,
+    0.9
+   ],
+   [
+    "ASILOS, ORFELINATOS Y SIMILARES",
+    0.1,
+    0.15
+   ],
+   [
+    "AUTOLAVADOS",
+    0.15,
+    0.3
+   ],
+   [
+    "AUTOMERCADOS",
+    0.15,
+    0.3
+   ],
+   [
+    "AUTOMOVILES, FABRICACION Y ENSAMBLAJE DE",
+    0.35,
+    0.7
+   ],
+   [
+    "AUTOMÓVILES, AGENCIA DE VENTA DE",
+    0.1,
+    0.15
+   ],
+   [
+    "AERONAVES, FABRICACION Y REPARACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "AVICULTURA, ACTIVIDADES RELACIONADAS CON LA",
+    0.15,
+    0.3
+   ],
+   [
+    "AVISOS LUMINOSOS, FABRICACION E INSTALACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "AZUCAR, PROCESAMIENTO DE",
+    0.15,
+    0.3
+   ],
+   [
+    "AZULEJOS, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "BAILE, Y DANZAS, ACADEMIAS DE",
+    0.1,
+    0.2
+   ],
+   [
+    "BALDOSAS Y SIMILARES, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "BANCOS Y ENTES FINANCIERO EN GENERAL",
+    0.05,
+    0.1
+   ],
+   [
+    "BARBERIA, PELUQUERIA Y SALONES DE BELLEZA",
+    0.15,
+    0.3
+   ],
+   [
+    "BARES",
+    0.15,
+    0.3
+   ],
+   [
+    "BATERÍAS (VER ACUMULADORES)",
+    0.35,
+    0.7
+   ],
+   [
+    "BAZARES",
+    0.1,
+    0.2
+   ],
+   [
+    "BAULES Y METALES, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "BEBIDAS ALCOHOLICAS, FABRICACION Y DESTILACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "BEBIDAS ALCOHOLICAS, VENTA DE",
+    0.1,
+    0.2
+   ],
+   [
+    "BETUNES Y CREMAS PARA ZAPATOS  SIMILARES, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "BIBLIOTECA",
+    0.1,
+    0.15
+   ],
+   [
+    "BICICLETAS, FABRICACION Y REPARACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "BIENES RAICES, OFICINA DE",
+    0.1,
+    0.15
+   ],
+   [
+    "BILLARES, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "BILLARES DE SALA",
+    0.15,
+    0.3
+   ],
+   [
+    "BIOANALISIS, LABORATORIOS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "BIOLOGICAS, RELACIONADAS CON INVESTIGACIONES",
+    0.3,
+    0.6
+   ],
+   [
+    "BODEGAS",
+    0.2,
+    0.4
+   ],
+   [
+    "BOMBEROS CUERPO DE",
+    1.5,
+    3
+   ],
+   [
+    "BOTIQUINES",
+    0.25,
+    0.5
+   ],
+   [
+    "BOWLING, BOLERAS O BOLICHES",
+    0.1,
+    0.2
+   ],
+   [
+    "BUCEO, FABRICACION DE EQUIPOS PARA",
+    0.45,
+    0.9
+   ],
+   [
+    "BUCEO ACTIVIDADES RELACIONADAS CON EL",
+    1.5,
+    3
+   ],
+   [
+    "BUFETES",
+    0.05,
+    0.1
+   ],
+   [
+    "BUJIAS Y PARTES ELÉCTRICAS PARA AUTOMÓVILES, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "BUQUES, FABRICACION Y REPARACIÓN DE",
+    0.75,
+    1.5
+   ],
+   [
+    "BUQUES PERSONAL DE",
+    0.45,
+    0.9
+   ],
+   [
+    "CABLES Y CONDUCTORES ELÉCTRICOS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CACAO, PROCESAMIENTO DEL",
+    0.25,
+    0.5
+   ],
+   [
+    "CAFÉ, PENSAMIENTO DEL",
+    0.25,
+    0.5
+   ],
+   [
+    "CAFETERIAS",
+    0.15,
+    0.3
+   ],
+   [
+    "CANTERAS",
+    0.4,
+    0.8
+   ],
+   [
+    "CALDERERÍAS",
+    0.45,
+    0.9
+   ],
+   [
+    "CALZADO, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "CARAMELOS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CARBON, EXTRACCION Y PROCESAMIENTO DEL",
+    0.35,
+    0.7
+   ],
+   [
+    "CARCELES, CASAS CORRECCIONALES Y PENITENCIARIA",
+    0.45,
+    0.9
+   ],
+   [
+    "CARGA Y DESCARGA, ACTIVIDADES RELACIONADAS CON LA",
+    0.25,
+    0.5
+   ],
+   [
+    "CARNICERIA",
+    0.15,
+    0.3
+   ],
+   [
+    "CARPINTERIAS",
+    0.5,
+    1
+   ],
+   [
+    "CARROCERIAS, FABRICACION Y REPARACION DE",
+    0.75,
+    1.5
+   ],
+   [
+    "CARTON, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CAUCHERAS",
+    0.3,
+    0.6
+   ],
+   [
+    "CAUCHOS, EXTRACCION Y PROCESAMIENTO DEL",
+    0.45,
+    0.9
+   ],
+   [
+    "CAZA, ACTIVIDADES RELACIONADA CON LA",
+    1.5,
+    3
+   ],
+   [
+    "CELULOIDE, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CEMENTO, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CEPILLOS, ESCOBAS, BROCHAS Y PINCELES, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "CARA, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "CERAMICA, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "CERRAJERIA",
+    0.25,
+    0.5
+   ],
+   [
+    "CERVEZA, FABRICACION Y DISTRIBUCIÓN DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CIGARRILLOS, ELABORACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CINE Y TEATRO, SALA DE 0,20%",
+    0.1,
+    0.2
+   ],
+   [
+    "CINEMATOGRAFIA, INDUSTRIA DE LA",
+    0.25,
+    0.5
+   ],
+   [
+    "CINTAS, FABRICACION DE (CINEMATOGRAFIA, FONOGRAFICAS O DE VIDEOS)",
+    0.3,
+    0.6
+   ],
+   [
+    "CIRCOS",
+    1.5,
+    3
+   ],
+   [
+    "CLAVOS, TACHUELAS Y SIMILARES FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "CLINICAS, HOSPITALES Y SANATORIOS",
+    0.15,
+    0.3
+   ],
+   [
+    "CLUBES",
+    0.15,
+    0.3
+   ],
+   [
+    "COLA, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "COLCHONES, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "COLEGIOS",
+    0.1,
+    0.2
+   ],
+   [
+    "COMBUSTIBLE, ELABORACION, DEPOSITO Y TRANSPORTE DE",
+    0.75,
+    1.5
+   ],
+   [
+    "COMERCIO DE( VENTAS EN GENERAL)",
+    0.1,
+    0.2
+   ],
+   [
+    "CONCRETERAS",
+    0.5,
+    1
+   ],
+   [
+    "CONSERVAS ALIMENTICIAS, ELABORACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "CONFITERIAS",
+    0.15,
+    0.3
+   ],
+   [
+    "CONTRAENCHAPADO DE MADERA FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "CONSTRUCCIÓN, INDUSTRIA DE LA",
+    0.35,
+    0.7
+   ],
+   [
+    "CONTABILIDAD, OFICINAS DE",
+    0.05,
+    0.1
+   ],
+   [
+    "CONVENTOS Y MONASTERIOS",
+    0.1,
+    0.2
+   ],
+   [
+    "CORCHOS, FABRICACION",
+    0.35,
+    0.7
+   ],
+   [
+    "CORDELERIA, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "CORREOS, OFICINAS DE",
+    0.1,
+    0.2
+   ],
+   [
+    "COSMETICOS FABRICACION",
+    0.25,
+    0.5
+   ],
+   [
+    "CRIA DE ANIMALES",
+    0.3,
+    0.6
+   ],
+   [
+    "CRISTALES, VIDRIOS Y ESPEJOS",
+    0.45,
+    0.9
+   ],
+   [
+    "CUCHILLERIAS",
+    0.45,
+    0.9
+   ],
+   [
+    "CUERO, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CHARCUTERIAS",
+    0.25,
+    0.5
+   ],
+   [
+    "CHICLE FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "CHOCOLATES FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "DECORACION EMPRESAS DE",
+    0.1,
+    0.2
+   ],
+   [
+    "DESINFECCION Y FUMIGACION, LABORES DE",
+    0.5,
+    1
+   ],
+   [
+    "DENTALES LABORATORIOS",
+    0.25,
+    0.5
+   ],
+   [
+    "DENTRIFICOS FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "DEPORTIVOS EQUIPOS",
+    1.5,
+    3
+   ],
+   [
+    "DETERGENTES FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "DIQUES Y ASTILLEROS",
+    1.5,
+    3
+   ],
+   [
+    "DISCOS FONOGRAFICOS FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "DROGUERIA",
+    0.25,
+    0.5
+   ],
+   [
+    "EBANISTERIA",
+    0.75,
+    1.5
+   ],
+   [
+    "ECONOMIA, OFICINA DE ESTUDIO DE",
+    0.05,
+    0.1
+   ],
+   [
+    "EDUCACION Y DECENCIA, CENTRO DE",
+    0.1,
+    0.2
+   ],
+   [
+    "ELECTRICIDAD, ACTIVIDADES RELACIONADAS CON LA",
+    0.45,
+    0.9
+   ],
+   [
+    "ELECTRODOMESTICOS, FABRICACION Y REPARACIÓN DE",
+    0.35,
+    0.7
+   ],
+   [
+    "EMPACADORAS, EMPAQUETADORAS O ENVASADORAS",
+    0.25,
+    0.5
+   ],
+   [
+    "ENCAJES, FABRICACION DE",
+    0.25,
+    0.5
+   ],
+   [
+    "ENSAMBLAJE, PLANTAS DE",
+    0.5,
+    1
+   ],
+   [
+    "ENCUADERNACION, ACTIVIDADES RELACIONADAS CON LA",
+    0.3,
+    0.6
+   ],
+   [
+    "ESMERILES, FABRICACIÓN DE",
+    0.45,
+    0.9
+   ],
+   [
+    "ESPARTO, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "ESPUMA PLASTICAS O DE GOMAS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "ESTACION DE SERVICIOS",
+    0.25,
+    0.5
+   ],
+   [
+    "ESTADISTICOS, OFICINA DE ESTUDIOS",
+    0.05,
+    0.1
+   ],
+   [
+    "EXPOSICIONES, SALAS DE",
+    0.1,
+    0.2
+   ],
+   [
+    "EXTINTORES, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "FERROCARRILES, FABRICACION DE",
+    0.5,
+    1
+   ],
+   [
+    "FERROCARRILES EMPRESAS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "FERRETERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "FILATELIAS Y NUMISMÁTICAS",
+    0.1,
+    0.2
+   ],
+   [
+    "FISICA LABORATORIOS DE",
+    0.35,
+    0.7
+   ],
+   [
+    "FLORICULTURA",
+    0.15,
+    0.3
+   ],
+   [
+    "FORESTALES EXPLOTACIONES",
+    0.75,
+    1.5
+   ],
+   [
+    "FORJA DE METALES, TALLER DE",
+    1,
+    2
+   ],
+   [
+    "FORMICA FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "FOSFORO, FABRICACION DE",
+    0.5,
+    1
+   ],
+   [
+    "FOTOGRAFIA, LABORATORIO DE",
+    0.35,
+    0.7
+   ],
+   [
+    "FRIGORIFICOS",
+    0.25,
+    0.5
+   ],
+   [
+    "FRUTERIAS",
+    0.15,
+    0.3
+   ],
+   [
+    "FUEGOS ARTIFICIALES, FABRICACION DE",
+    1.5,
+    3
+   ],
+   [
+    "FUNDICION, TALLERES DE",
+    1.5,
+    3
+   ],
+   [
+    "FUNERARIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "GALLETAS Y BIZCOCHOS, ELABORACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "GALVANIZADOS Y ELECTROPLATEADOS, INDUSTRIAS DE",
+    0.45,
+    0.9
+   ],
+   [
+    "GAMUZADOS DE TELAS, PROCESO DE",
+    0.35,
+    0.7
+   ],
+   [
+    "GANADO, CRIA Y COMERCIO DE",
+    0.3,
+    0.6
+   ],
+   [
+    "GARAJES Y ESTACIONAMIENTO",
+    0.25,
+    0.5
+   ],
+   [
+    "GAS PLANTAS DE, O TRANSPORTE DE",
+    0.75,
+    1.5
+   ],
+   [
+    "GASEOSAS, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "GEOLOGIA, ACTIVIDADES RELACIONADAS CON LA",
+    0.35,
+    0.7
+   ],
+   [
+    "GESTORIA",
+    0.25,
+    0.5
+   ],
+   [
+    "GIMNASIO",
+    0.25,
+    0.5
+   ],
+   [
+    "GRANJAS",
+    0.3,
+    0.6
+   ],
+   [
+    "GRASAS Y LUBRICANTES, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "GUARDIANES EMPRESAS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "HACIENDAS",
+    0.25,
+    0.5
+   ],
+   [
+    "HARINAS FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "HELADOS FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "HERRAMIENTAS, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "HERRERIAS",
+    0.45,
+    0.9
+   ],
+   [
+    "HIELO, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "HIERRO EXPLOTACION DE",
+    0.5,
+    1
+   ],
+   [
+    "HILANDERIAS",
+    0.25,
+    0.5
+   ],
+   [
+    "HIPODROMOS",
+    0.3,
+    0.6
+   ],
+   [
+    "HOJALATAS, TALLERES DE",
+    0.45,
+    0.9
+   ],
+   [
+    "HONGOS, CULTIVOS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "HOSPITALES",
+    0.15,
+    0.3
+   ],
+   [
+    "HORTICULTURA",
+    0.25,
+    0.5
+   ],
+   [
+    "HOTELERIA",
+    0.15,
+    0.3
+   ],
+   [
+    "IDIOMAS, ACADEMIAS DE",
+    0.1,
+    0.2
+   ],
+   [
+    "IGLESIAS, CAPILLAS , TEMPLOS",
+    0.1,
+    0.2
+   ],
+   [
+    "INGENIERIA, OFICINA O EMPRESAS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "INMOBILIARIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "IMPERMEABILIZACIONES",
+    0.35,
+    0.7
+   ],
+   [
+    "IMPRENTAS",
+    0.3,
+    0.6
+   ],
+   [
+    "INSECTICIDAS, FABRICACION DE",
+    0.75,
+    1.5
+   ],
+   [
+    "INSTRUMENTOS DE PRECISION Y CIENTÍFICOS, FABRICACION Y REPARACIÓN DE",
+    0.3,
+    0.6
+   ],
+   [
+    "INVESTIGACIÓN, AGENCIA DE",
+    0.25,
+    0.5
+   ],
+   [
+    "JABON FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "JARDINERIAS",
+    0.25,
+    0.5
+   ],
+   [
+    "JOYERIA Y RELOJERIA",
+    0.15,
+    0.3
+   ],
+   [
+    "JUGUETERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "JUGUETES, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "LABORATORIOS",
+    0.3,
+    0.6
+   ],
+   [
+    "LACTEOS, ELABORACION DE PRODUCTOS",
+    0.3,
+    0.6
+   ],
+   [
+    "LADRILLOS Y TEJAS FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "LAMPARAS FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "LAPICES FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "LATAS Y ENVASES DE METAL, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "LATONERÍA TALLERES DE",
+    0.5,
+    1
+   ],
+   [
+    "LAVANDERIAS",
+    0.3,
+    0.6
+   ],
+   [
+    "LECHE, PROCESAMIENTO DE LA, Y FABRICACION DE DERIVADOS DE LA",
+    0.3,
+    0.6
+   ],
+   [
+    "LEJIAS Y CLORO FABRICACION DE",
+    0.4,
+    0.8
+   ],
+   [
+    "LETREROS FABRICACION E INSTALACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "LIBRERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "LICORERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "LICORES, FABRICACION Y DESTILACION",
+    0.4,
+    0.8
+   ],
+   [
+    "LOTERIAS, AGENCIAS DE",
+    0.1,
+    0.2
+   ],
+   [
+    "MADERA, ACTIVIDAD RELACIONADA CON LA INDUSTRIA DE",
+    0.45,
+    0.9
+   ],
+   [
+    "MALETAS ( VER BAULES Y MALETAS)",
+    0.25,
+    0.5
+   ],
+   [
+    "MANICOMIOS",
+    1.5,
+    3
+   ],
+   [
+    "MANTENIMIENTO Y LIMPIEZA, EMPRESAS DE",
+    0.25,
+    0.5
+   ],
+   [
+    "MARINA, PERSONAL DE LA",
+    0.75,
+    1.5
+   ],
+   [
+    "MARMOLERIAS",
+    0.45,
+    0.9
+   ],
+   [
+    "MATADERO",
+    0.35,
+    0.7
+   ],
+   [
+    "MECANICOS, TALLERES (EN GENERAL)",
+    0.45,
+    0.9
+   ],
+   [
+    "MECATES, FABRICAS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "MEDICOS, CONSULTORIOS",
+    0.1,
+    0.2
+   ],
+   [
+    "MENSAJEROS, EMPRESAS DE",
+    0.35,
+    0.7
+   ],
+   [
+    "METALES TRABAJOS RELACIONADOS CON LOS",
+    0.45,
+    0.9
+   ],
+   [
+    "METALICAS INSTALACIONES",
+    0.35,
+    0.7
+   ],
+   [
+    "MIMBRE, FABRICACION DE MUEBLES DE MIMBRE",
+    0.35,
+    0.7
+   ],
+   [
+    "MINERIA ACTIVIDADES RELACIONADAS CON LA",
+    0.45,
+    0.9
+   ],
+   [
+    "MOLINOS",
+    0.3,
+    0.6
+   ],
+   [
+    "MODISTERIAS",
+    0.15,
+    0.3
+   ],
+   [
+    "MOTOCICLETAS REPARACIÓN DE",
+    0.3,
+    0.6
+   ],
+   [
+    "MUEBLES FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "MUSICALES, FABRICACION DE INSTRUMENTOS",
+    0.3,
+    0.6
+   ],
+   [
+    "NOTARIAS",
+    0.1,
+    0.15
+   ],
+   [
+    "OCEANOGRAFIA, ACTIVIDADES RELACIONADAS CON LA",
+    1.5,
+    3
+   ],
+   [
+    "ODONTOLOGICOS CONSULTORIOS",
+    0.1,
+    0.2
+   ],
+   [
+    "OPTICAS",
+    0.1,
+    0.2
+   ],
+   [
+    "ORFEBRERIAS",
+    0.35,
+    0.7
+   ],
+   [
+    "ORTOPEDICOS, FABRICACION DE APARATOS",
+    0.35,
+    0.7
+   ],
+   [
+    "OXIGENOS PROCESOS RELACIONADOS CON EL",
+    0.45,
+    0.9
+   ],
+   [
+    "PANADERIA Y PASTELERIA",
+    0.25,
+    0.5
+   ],
+   [
+    "PAPEL FABRICACION DE PAPEL0",
+    0.35,
+    0.7
+   ],
+   [
+    "PARAGUAS Y BASTONES, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "PARARRAYOS",
+    0.45,
+    0.9
+   ],
+   [
+    "PASTAS ALIMENTICIAS, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "PEINES, PEINETAS Y SIMILARES, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "PELETERIA",
+    0.3,
+    0.6
+   ],
+   [
+    "PELUQUERIAS",
+    0.15,
+    0.3
+   ],
+   [
+    "PERFORACIONES, ACTIVIDADES RELACIONADAS CON",
+    0.45,
+    0.9
+   ],
+   [
+    "PERFUMERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "PERIODICOS Y REVISTAS",
+    0.25,
+    0.5
+   ],
+   [
+    "PERITAJES, EMPRESAS DE",
+    0.15,
+    0.3
+   ],
+   [
+    "PESCA, ACTIVIDADES RELACIONADAS CON LA",
+    0.35,
+    0.7
+   ],
+   [
+    "PESCADO, INDUSTRIA DEL",
+    0.3,
+    0.6
+   ],
+   [
+    "PETROLEO, ACTIVIDADES RELACIONADAS CON EL",
+    0.45,
+    0.9
+   ],
+   [
+    "PETROQUIMICA, INDUSTRIA",
+    0.45,
+    0.9
+   ],
+   [
+    "PIANOS Y ORGANOS, FABRICACION Y REPARACIÓN DE",
+    0.35,
+    0.7
+   ],
+   [
+    "PIELES, PROCESAMIENTO DE",
+    0.35,
+    0.7
+   ],
+   [
+    "PILAS ELECTRICAS, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "PINTURAS, BARNICES Y LACAS, FABRICACION",
+    0.5,
+    1
+   ],
+   [
+    "PISCICULTURA, ACTIVIDADES RELACIONADAS CON LA",
+    0.25,
+    0.5
+   ],
+   [
+    "PISOS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "PLASTICOS, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "PLATERIA, ACTIVIDADES RELACIONADAS  CON LA",
+    0.35,
+    0.7
+   ],
+   [
+    "PLOMERIA, ACTIVIDADES RELACIONADAS CON LA",
+    0.3,
+    0.6
+   ],
+   [
+    "POLVORA, FABRICACION DE",
+    1.5,
+    3
+   ],
+   [
+    "PORCELANA Y LOZA, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "PROTESIS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "PUBLICIDAD, AGENCIA DE",
+    0.1,
+    0.2
+   ],
+   [
+    "QUESO, ELABORACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "QUIMICA, INDUSTRIAS",
+    0.35,
+    0.7
+   ],
+   [
+    "QUINCALLERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "QUIROPEDIAS",
+    0.15,
+    0.3
+   ],
+   [
+    "RADIO, FABRICACION Y REPARACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "RADIODIFUSION, INDUSTRIA DE LA",
+    0.15,
+    0.3
+   ],
+   [
+    "REENCAUCHADO, INDUSTRIA DEL",
+    0.45,
+    0.9
+   ],
+   [
+    "REFORESTACION, EMPRESA DE",
+    0.3,
+    0.6
+   ],
+   [
+    "REFRIGERACION (VER AIRE ACONDICIONADO)",
+    0.35,
+    0.7
+   ],
+   [
+    "RELOJERIA",
+    0.15,
+    0.3
+   ],
+   [
+    "RESTAURANTES",
+    0.1,
+    0.2
+   ],
+   [
+    "SACOS Y COSTALES DE SISAL Y YUTE, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "SAL, PROCESAMIENTO Y REFINACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "SANITARIOS, FABRICACION DE EQUIPOS",
+    0.3,
+    0.6
+   ],
+   [
+    "SASTRERIA",
+    0.15,
+    0.3
+   ],
+   [
+    "SEGURIDAD, EMPRESA DE",
+    0.3,
+    0.6
+   ],
+   [
+    "SEGUROS, COMPAÑIAS DE, Y SIMILARES",
+    0.05,
+    0.1
+   ],
+   [
+    "SERENOS, EMPRESA DE",
+    0.3,
+    0.6
+   ],
+   [
+    "SERVICIOS DOMESTICOS, EMPRESAS DE",
+    0.25,
+    0.5
+   ],
+   [
+    "SIDERURGICA, INDUSTRIA",
+    0.45,
+    0.9
+   ],
+   [
+    "SILENCIADORES Y TUBOS DE ESCAPES FABRICACION E INSTALACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "SOLDADURAS, TALLERES DE",
+    0.45,
+    0.9
+   ],
+   [
+    "SOMBREROS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "SUPERMERCADOS",
+    0.15,
+    0.3
+   ],
+   [
+    "TABACOS, PROCESAMIENTO DE",
+    0.3,
+    0.6
+   ],
+   [
+    "TABERNAS",
+    0.15,
+    0.3
+   ],
+   [
+    "TACONES, FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "TALABARTERIAS",
+    0.35,
+    0.7
+   ],
+   [
+    "TAPICERIAS",
+    0.3,
+    0.6
+   ],
+   [
+    "TAPONES FABRICACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "TEATRO, COMPAÑIAS DE",
+    0.15,
+    0.3
+   ],
+   [
+    "TECHOS FABRICACION E INSTALACIÓN DE",
+    0.25,
+    0.5
+   ],
+   [
+    "TELARES",
+    0.25,
+    0.5
+   ],
+   [
+    "TELEFONOS, TELEGRAFOS, FABRICACION Y REPARACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "TELEVISION, INDUSTRIA DE LA",
+    0.15,
+    0.3
+   ],
+   [
+    "TELEVISORES, FABRICACION Y REPARACION DE",
+    0.3,
+    0.6
+   ],
+   [
+    "TENERIAS",
+    0.25,
+    0.5
+   ],
+   [
+    "TELECOMUNICACIONES, INDUSTRIAS DE LA",
+    0.15,
+    0.3
+   ],
+   [
+    "TIENDAS ( DE VENTAS EN GENERAL)",
+    0.1,
+    0.2
+   ],
+   [
+    "TINTAS Y SIMILARES FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "TINTORERIAS",
+    0.3,
+    0.6
+   ],
+   [
+    "TIPOGRAFIAS",
+    0.3,
+    0.6
+   ],
+   [
+    "TIPOGRAFIAS, ACTIVIDADES RELACIONADAS CON LA",
+    0.25,
+    0.5
+   ],
+   [
+    "TORNERIAS",
+    0.45,
+    0.9
+   ],
+   [
+    "TORNILLOS, CLAVOS Y SIMILARES, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "TRANSPORTE, EMPRESA DE",
+    0.35,
+    0.7
+   ],
+   [
+    "TRUCHICULTURA, ACTIVIDADES RELACIONADAS CON LA",
+    0.25,
+    0.5
+   ],
+   [
+    "TUBOS METALICOS, FABRICACION DE",
+    0.45,
+    0.9
+   ],
+   [
+    "VELAS, FABRICACION DE",
+    0.35,
+    0.7
+   ],
+   [
+    "VETERINARIOS, CONSULTORIOS",
+    0.15,
+    0.3
+   ],
+   [
+    "VIAJES, AGENCIA DE",
+    0.05,
+    0.1
+   ],
+   [
+    "VIDRIOS, INDUSTRIA DEL",
+    0.35,
+    0.7
+   ],
+   [
+    "VIGILANCIAS, EMPRESAS DE",
+    0.3,
+    0.6
+   ],
+   [
+    "VINO, AGUARDIENTES Y LICORES, FABRICACION Y DESTILACION",
+    0.4,
+    0.8
+   ],
+   [
+    "VIVERES, VENTAS DE",
+    0.15,
+    0.3
+   ],
+   [
+    "YESO, FABRICACION DE YESO",
+    0.35,
+    0.7
+   ],
+   [
+    "ZAPATERIAS",
+    0.1,
+    0.2
+   ],
+   [
+    "ZAPATOS, CONFECCIONES DE",
+    0.3,
+    0.6
+   ],
+   [
+    "ZOCALOS, FABRICACION DE",
+    0.4,
+    0.8
+   ],
+   [
+    "ZOOLOGICOS",
+    0.3,
+    0.6
+   ]
+  ],
+  "options": [
+   [
+    "Negligencia del Empleador",
+    0.1,
+    0.3
+   ],
+   [
+    "Asistencia Legal y Defensa Penal",
+    0.15,
+    0.3
+   ],
+   [
+    "Gastos Médicos",
+    0.2,
+    5.5
+   ]
+  ]
+ }
+}
