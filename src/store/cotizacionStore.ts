@@ -7,7 +7,8 @@ import {
 } from '../tarifas/rcp-rce';
 import { useParametrosStore } from './parametrosStore';
 
-export type Producto = 'rcg' | 'rc';
+/** planes = PLANI/PLANII/PLAN3 de Sis2000 con las reglas del RCG (opción de prueba). */
+export type Producto = 'rcg' | 'rc' | 'planes';
 export type K = 'p' | 'e';
 
 export interface ProductoForm {
@@ -25,9 +26,13 @@ export interface CotizacionState {
   comun: {
     asegurado: string; tipoDoc: string; documento: string; correo: string; intermediario: string; ubicacion: string;
     sucursal: string; emisor: string; correoEmisor: string;
+    /** Solo para emitir planes en Sis2000. */
+    apellido: string; telefono: string;
   };
   contrato: { esContrato: boolean; numero: string; objeto: string; coasegurado: string; vigencia: string };
   rcg: { moneda: MonedaRcg; clase: number; indole: string; actividadEspecifica: string; limite: string; tasa: string; condiciones: number[]; opcion: 'I' | 'II' | 'III' };
+  /** Plan Sis2000 elegido en la opción planes. */
+  planSel: string;
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
     claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
@@ -38,6 +43,7 @@ export interface CotizacionState {
   setRcg: (c: Partial<CotizacionState['rcg']>) => void;
   setRc: (c: Partial<CotizacionState['rc']>) => void;
   setRcProducto: (k: K, c: Partial<ProductoForm>) => void;
+  setPlanSel: (cplan: string) => void;
   reset: () => void;
 }
 
@@ -50,9 +56,10 @@ const productoInicial = (k: K): ProductoForm => ({
 
 const inicial = () => ({
   producto: null,
-  comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '' },
+  comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '', apellido: '', telefono: '' },
   contrato: { esContrato: false, numero: '', objeto: '', coasegurado: '', vigencia: 'Anual' },
   rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: useParametrosStore.getState().rcg.clases[0] ? String(tasaPromedio(useParametrosStore.getState().rcg.clases[0])) : '', condiciones: [], opcion: 'I' as const },
+  planSel: '',
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
     claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
@@ -67,6 +74,7 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
   setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c } })),
   setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c } })),
   setRcProducto: (k, c) => set((s) => ({ rc: { ...s.rc, [k]: { ...s.rc[k], ...c } } })),
+  setPlanSel: (planSel) => set({ planSel }),
   reset: () => set(inicial()),
 }));
 
@@ -109,6 +117,19 @@ export function useCotizacionRcg() {
   const s = useCotizacionStore();
   const p = useParametrosStore((x) => x.rcg);
   return useMemo(() => cotizarRcg(solicitudRcg(s), p), [s.comun, s.contrato, s.rcg, p]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
+ * Planes Sis2000 con las reglas del RCG: mismas validaciones (tomador, clase, índole, actividad, contrato),
+ * en USD y con la suma del primer plan como límite de la opción I.
+ */
+export function useCotizacionPlanesRcg(sumaBase: number | undefined) {
+  const s = useCotizacionStore();
+  const p = useParametrosStore((x) => x.rcg);
+  return useMemo(
+    () => cotizarRcg({ ...solicitudRcg(s), moneda: 'USD', limite: sumaBase ?? p.limiteMin }, p),
+    [s.comun, s.contrato, s.rcg, p, sumaBase], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 }
 
 export function useCotizacionRc() {

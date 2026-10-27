@@ -15,7 +15,8 @@ type Errores = Partial<Record<string, string>>;
 /** Mismas reglas que los motores (rcg.ts / rcp-rce.ts) para los datos de este paso. */
 function validar(s: CotizacionState): Errores {
   const { comun: c, contrato: k, producto } = s;
-  const rcg = producto === 'rcg';
+  // Los planes Sis2000 siguen las reglas del RCG.
+  const rcg = producto !== 'rc';
   const e: Errores = {};
   if (!c.asegurado.trim()) e.asegurado = 'Indica el tomador / asegurado.';
   if (!rcg && !c.documento.trim()) e.documento = 'Indica el RIF o documento del tomador.';
@@ -26,6 +27,14 @@ function validar(s: CotizacionState): Errores {
   if (!c.emisor.trim()) e.emisor = 'Indica quién elabora la cotización.';
   if (!rcg && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Introduce el correo de quien cotiza.';
   if (rcg && c.correoEmisor && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Correo con formato inválido.';
+  // Emitir en Sis2000 exige identificación (RIF/cédula hasta 9 dígitos), teléfono y dirección.
+  if (producto === 'planes') {
+    const digitos = c.documento.replace(/D/g, '');
+    if (!digitos || digitos.length > 9) e.documento = 'Indica el RIF o la cédula (hasta 9 dígitos).';
+    if (esPersonaNatural(c.tipoDoc) && !c.apellido.trim()) e.apellido = 'Indica el apellido.';
+    if (!/^d{10,15}$/.test(c.telefono.replace(/D/g, ''))) e.telefono = 'Indica un teléfono válido (ej. 0412 1234567).';
+    if (!c.ubicacion.trim()) e.ubicacion = 'Indica la dirección del riesgo.';
+  }
   if (k.esContrato) {
     if (!k.numero.trim()) e.numero = 'Indica el número de contrato.';
     if (!k.objeto.trim()) e.objeto = 'Indica el objeto de la obra.';
@@ -34,10 +43,13 @@ function validar(s: CotizacionState): Errores {
   return e;
 }
 
+export const esPersonaNatural = (tipoDoc: string) => tipoDoc === 'V' || tipoDoc === 'E' || tipoDoc === 'P';
+
 export function TomadorStep() {
   const s = useCotizacionStore();
   const { comun: c, contrato: k, setComun, setContrato } = s;
-  const rcg = s.producto === 'rcg';
+  const rcg = s.producto !== 'rc';
+  const planes = s.producto === 'planes';
   const [intento, setIntento] = useState(false);
   const errores = intento ? validar(s) : {};
 
@@ -48,7 +60,12 @@ export function TomadorStep() {
           <Field label="Nombre o razón social" error={errores.asegurado} full>
             <Input value={c.asegurado} maxLength={180} onChange={(e) => setComun({ asegurado: e.target.value })} placeholder="Ej. Inversiones Caracas, C.A." />
           </Field>
-          <Field label={rcg ? 'RIF (opcional)' : 'RIF'} error={errores.documento}>
+          {planes && esPersonaNatural(c.tipoDoc) && (
+            <Field label="Apellido" error={errores.apellido} full>
+              <Input value={c.apellido} maxLength={120} onChange={(e) => setComun({ apellido: e.target.value })} />
+            </Field>
+          )}
+          <Field label={rcg && !planes ? 'RIF (opcional)' : 'RIF'} error={errores.documento}>
             <IdentityInput
               tipoDoc={c.tipoDoc}
               identificacion={c.documento}
@@ -60,10 +77,15 @@ export function TomadorStep() {
           <Field label={rcg ? 'Correo electrónico del tomador' : 'Correo electrónico (opcional)'} error={errores.correo} hint={rcg ? 'Destinatario de la cotización.' : undefined}>
             <Input type="email" value={c.correo} maxLength={150} onChange={(e) => setComun({ correo: e.target.value })} placeholder="correo@empresa.com" />
           </Field>
+          {planes && (
+            <Field label="Teléfono" error={errores.telefono}>
+              <Input type="tel" value={c.telefono} maxLength={20} onChange={(e) => setComun({ telefono: e.target.value })} placeholder="0412 1234567" />
+            </Field>
+          )}
           <Field label="Intermediario (opcional)">
             <Input value={c.intermediario} onChange={(e) => setComun({ intermediario: e.target.value })} placeholder="Nombre o código" />
           </Field>
-          <Field label={rcg ? 'Ubicación del riesgo (opcional)' : 'Ubicación del riesgo'} error={errores.ubicacion} full>
+          <Field label={rcg && !planes ? 'Ubicación del riesgo (opcional)' : 'Ubicación del riesgo'} error={errores.ubicacion} full>
             <Textarea rows={2} value={c.ubicacion} onChange={(e) => setComun({ ubicacion: e.target.value })} placeholder="Estado, ciudad, urbanización, calle…" />
           </Field>
         </div>

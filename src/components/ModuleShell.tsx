@@ -11,7 +11,7 @@ import { useCotizacionStore } from '../store/cotizacionStore';
 import { esPersonalizado, useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
 
-const NOMBRE_PRODUCTO = { rcg: 'RC General', rc: 'RC Patronal / Empresarial' } as const;
+const NOMBRE_PRODUCTO = { rcg: 'RC General', rc: 'RC Patronal / Empresarial', planes: 'Planes RCG Sis2000 (prueba)' } as const;
 
 const VISTA_PARAMETROS = {
   eyebrow: 'Configuración · Tarifa',

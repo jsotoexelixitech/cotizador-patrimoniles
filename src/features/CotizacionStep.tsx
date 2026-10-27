@@ -1,20 +1,24 @@
-import { useState, type ReactNode } from 'react';
-import { Calculator, Check, ListChecks, ShieldCheck, Stamp } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Calculator, Check, ListChecks, Loader2, RefreshCw, ShieldCheck, Stamp } from 'lucide-react';
 import { SectionCard } from '../components/ui/SectionCard';
 import { Field, Input, Select } from '../components/ui/FormField';
 import { StepActions } from '../components/ui/StepActions';
 import { Aviso } from '../components/ui/Aviso';
 import { Badge } from '../components/ui/Badge';
+import { Button } from '../components/ui/Button';
 import { cn } from '../lib/utils';
 import { importe, porcentaje } from '../tarifas/comun';
 import { MONEDAS_RCG, type MonedaRcg } from '../tarifas/rcg';
 import { COBERTURAS_BASICAS, NOMBRES, opcionalesDe, type IdOpcion, type ParametrosRc } from '../tarifas/rcp-rce';
 import { useParametrosStore } from '../store/parametrosStore';
-import { useCotizacionRc, useCotizacionRcg, useCotizacionStore, type K } from '../store/cotizacionStore';
+import { useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, type K } from '../store/cotizacionStore';
+import { usePlanesStore } from '../store/planesStore';
+import { primasTarifaRcg } from '../tarifas/planes-rcg';
 import { toast } from '../store/toastStore';
 
 export function CotizacionStep() {
   const producto = useCotizacionStore((s) => s.producto);
+  if (producto === 'planes') return <CotizacionPlanes />;
   return producto === 'rc' ? <CotizacionRc /> : <CotizacionRcg />;
 }
 
@@ -131,6 +135,100 @@ function CotizacionRcg() {
         const e = cot.errores.limite ?? cot.errores.tasa;
         if (e) { toast.error('Revisa la cotización', e); return false; }
         if (!opcionValida) setRcg({ opcion: 'I' });
+        return true;
+      }} />
+    </div>
+  );
+}
+
+/** Planes de Sis2000 cotizados en línea, con la prima de tarifa RCG al lado como referencia. */
+function CotizacionPlanes() {
+  const prm = useParametrosStore((s) => s.rcg);
+  const rcg = useCotizacionStore((s) => s.rcg);
+  const setRcg = useCotizacionStore((s) => s.setRcg);
+  const planSel = useCotizacionStore((s) => s.planSel);
+  const setPlanSel = useCotizacionStore((s) => s.setPlanSel);
+  const { planes, cargando, error, cargar } = usePlanesStore();
+  const cot = useCotizacionPlanesRcg(planes[0]?.suma);
+  const clase = prm.clases[rcg.clase] ?? prm.clases[0];
+  const tasa = Number(rcg.tasa);
+  const tarifa = cot.errores.tasa ? [] : primasTarifaRcg(planes, tasa, prm);
+  const elegido = planes.find((p) => p.cplan === planSel);
+  const usd = (n: number) => `USD ${importe(n)}`;
+
+  useEffect(() => {
+    if (!planes.length && !cargando && !error) void cargar();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Tasa de la clase" description={`Clase: ${clase.etiqueta} · ${rcg.indole}`} Icon={Calculator}>
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
+            <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
+          </Field>
+          <div className="sm:col-span-2 self-end text-[0.78rem] text-slate-500">
+            La tasa se aplica a la suma de cada plan con la tarifa del RCG (prima mínima USD {importe(prm.primaMinimaDivisa)} proporcional).
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Planes de Sis2000" description="Ramo 28 · producto 89. Suma y prima de cada plan según spCalculoRiesgoGeneral." Icon={ShieldCheck}
+        statusLabel="Prueba" statusTone="warning">
+        {cargando && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Cotizando en Sis2000…</p>}
+        {!cargando && planes.length > 0 && (
+          <div className="grid sm:grid-cols-3 gap-3">
+            {planes.map((p) => {
+              const t = tarifa.find((x) => x.cplan === p.cplan);
+              return (
+                <TarjetaOpcion key={p.cplan} titulo={p.nombre} activa={planSel === p.cplan} onClick={() => setPlanSel(p.cplan)}
+                  prima={usd(p.prima)} etiqueta="Prima Sis2000 · se emite">
+                  <p>Suma asegurada: <strong className="text-slate-700">{usd(p.suma)}</strong></p>
+                  <p>{p.coberturas.length} coberturas · {p.cplan}</p>
+                  <p>Tarifa RCG: <strong className="text-slate-700">{t ? usd(t.prima) : '—'}</strong>{t?.primaMinimaAplicada ? ' (mínimo)' : ''}</p>
+                </TarjetaOpcion>
+              );
+            })}
+          </div>
+        )}
+        {error && (
+          <div className="space-y-3 mt-3">
+            <Aviso tono="error">{error}</Aviso>
+            <Button variant="secondary" size="sm" onClick={() => void cargar()}><RefreshCw size={13} /> Reintentar</Button>
+          </div>
+        )}
+      </SectionCard>
+
+      <Aviso>
+        Sis2000 emite con la suma, la prima y las coberturas del plan: el trigger Emision_Riesgos reemplaza lo que se envía.
+        La prima de tarifa RCG es referencial; para emitir con ella La Mundial tendría que cambiar ese trigger.
+      </Aviso>
+
+      {elegido && (
+        <SectionCard title={`Coberturas de ${elegido.nombre}`} description="Suma y prima por cobertura en Sis2000 (maplantar)." Icon={ListChecks}>
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-[0.78rem]">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr><th className="text-left font-bold px-3 py-2">Cobertura</th><th className="text-right font-bold px-3 py-2">Suma</th><th className="text-right font-bold px-3 py-2">Prima</th></tr>
+              </thead>
+              <tbody>
+                {elegido.coberturas.map((c) => (
+                  <tr key={c.nombre} className="border-t border-slate-100">
+                    <td className="px-3 py-1.5 text-slate-700">{c.nombre}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(c.suma)}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(c.prima)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible (tarifa RCG):</strong> {cot.deducible}</p>
+        </SectionCard>
+      )}
+
+      <StepActions continueLabel="Ver resumen" onContinue={() => {
+        if (cot.errores.tasa) { toast.error('Revisa la tasa', cot.errores.tasa); return false; }
+        if (!elegido) { toast.warning('Elige un plan', planes.length ? 'Selecciona Plan I, II o III.' : 'No hay planes cotizados de Sis2000.'); return false; }
         return true;
       }} />
     </div>

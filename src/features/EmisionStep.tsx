@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Download, FileCheck2, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
+import { Download, ExternalLink, FileCheck2, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
 import { useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
 import { SectionCard } from '../components/ui/SectionCard';
@@ -8,9 +8,13 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { importe, porcentaje } from '../tarifas/comun';
 import { NOMBRES } from '../tarifas/rcp-rce';
-import { rifCompleto, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
+import { rifCompleto, useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
 import { useWizardStore } from '../store/wizardStore';
+import { usePlanesStore } from '../store/planesStore';
+import { armarEmisionPlan, primasTarifaRcg } from '../tarifas/planes-rcg';
+import { Aviso } from '../components/ui/Aviso';
 import { TablaCoberturas, TotalRc } from './CotizacionStep';
+import { esPersonaNatural } from './TomadorStep';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -26,13 +30,15 @@ export function EmisionStep() {
   const resetWizard = useWizardStore((w) => w.reset);
   const { comun: c, contrato: k } = s;
   const rcg = s.producto === 'rcg';
+  const planes = s.producto === 'planes';
+  const resetPlanes = usePlanesStore((p) => p.reset);
   const cotRcg = useCotizacionRcg();
   const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
   const [generando, setGenerando] = useState(false);
   // Número provisional hasta tener el correlativo oficial desde el backend.
   const [numero] = useState(() => `RCG-${new Date().getFullYear()}-P${String(Date.now()).slice(-6)}`);
 
-  const nueva = () => { s.reset(); resetWizard(); window.scrollTo({ top: 0 }); };
+  const nueva = () => { s.reset(); resetPlanes(); resetWizard(); window.scrollTo({ top: 0 }); };
 
   const descargarRcg = async () => {
     setGenerando(true);
@@ -67,12 +73,14 @@ export function EmisionStep() {
           <Dato label="Fecha">{new Date().toLocaleDateString('es-VE')}</Dato>
           <Dato label="Sucursal">{c.sucursal}</Dato>
           <Dato label="Elaborada por">{c.emisor}</Dato>
-          {k.esContrato && <Dato label="Contrato">{[k.numero, rcg ? k.coasegurado : k.vigencia, k.objeto].filter(Boolean).join(' · ')}</Dato>}
+          {planes && <Dato label="Teléfono">{c.telefono}</Dato>}
+          {k.esContrato && <Dato label="Contrato">{[k.numero, s.producto !== 'rc' ? k.coasegurado : k.vigencia, k.objeto].filter(Boolean).join(' · ')}</Dato>}
         </div>
       </SectionCard>
 
-      {rcg ? <ResumenRcg /> : <ResumenRc />}
+      {rcg ? <ResumenRcg /> : planes ? <ResumenPlan /> : <ResumenRc />}
 
+      {planes ? <EmitirPlan /> : (
       <SectionCard title="Emisión de la póliza" description="La emisión se conecta con Sis2000 al habilitar los planes del producto." Icon={Lock}
         statusLabel="Pendiente" statusTone="warning">
         <div className="flex flex-wrap items-center gap-3">
@@ -87,6 +95,7 @@ export function EmisionStep() {
           </p>
         </div>
       </SectionCard>
+      )}
 
       <p className="text-[0.72rem] text-slate-500">
         Cotización válida por {rcg ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
@@ -113,6 +122,111 @@ export function EmisionStep() {
         </>
       )} />
     </div>
+  );
+}
+
+function ResumenPlan() {
+  const prm = useParametrosStore((p) => p.rcg);
+  const rcg = useCotizacionStore((x) => x.rcg);
+  const planSel = useCotizacionStore((x) => x.planSel);
+  const planes = usePlanesStore((p) => p.planes);
+  const cot = useCotizacionPlanesRcg(planes[0]?.suma);
+  const plan = planes.find((p) => p.cplan === planSel);
+  if (!plan) return <Aviso tono="error">No hay plan elegido: vuelve al paso de cotización.</Aviso>;
+  const tarifa = primasTarifaRcg(planes, Number(rcg.tasa), prm).find((t) => t.cplan === plan.cplan);
+  const usd = (n: number) => `USD ${importe(n)}`;
+
+  return (
+    <SectionCard title={`${plan.nombre} · Sis2000`} description={`${rcg.indole} · ${rcg.actividadEspecifica} · tasa ${porcentaje(Number(rcg.tasa))}`} Icon={ShieldCheck}
+      statusLabel={plan.cplan}>
+      <div className="grid sm:grid-cols-4 gap-4 mb-4">
+        <Dato label="Suma asegurada">{usd(plan.suma)}</Dato>
+        <Dato label="Prima Sis2000 (se emite)">{usd(plan.prima)}</Dato>
+        <Dato label="Prima tarifa RCG (referencia)">{tarifa ? usd(tarifa.prima) : '—'}</Dato>
+        <Dato label="Vigencia">Anual</Dato>
+      </div>
+      <ul className="text-[0.78rem] text-slate-600 grid sm:grid-cols-2 gap-x-6 gap-y-0.5 list-disc pl-5">
+        {plan.coberturas.map((x) => <li key={x.nombre}>{x.nombre} · {importe(x.suma)}</li>)}
+      </ul>
+      <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible:</strong> {cot.deducible}</p>
+    </SectionCard>
+  );
+}
+
+/** Emisión del plan por el partner patrimonial (mismo flujo que Emisión). Solo QA y con VITE_RCG_PLANES_EMITIR=1. */
+function EmitirPlan() {
+  const s = useCotizacionStore();
+  const prm = useParametrosStore((p) => p.rcg);
+  const { planes, emitiendo, emision, error, emitir } = usePlanesStore();
+  const [acepta, setAcepta] = useState(false);
+  const [pep, setPep] = useState(false);
+  const habilitada = import.meta.env.VITE_RCG_PLANES_EMITIR === '1';
+  const plan = planes.find((p) => p.cplan === s.planSel);
+  const { comun: c, contrato: k, rcg } = s;
+
+  const emitirAhora = async () => {
+    if (!plan) return;
+    const aviso = `Se emitirá en Sis2000 QA ${plan.nombre} (${plan.cplan}) por USD ${importe(plan.prima)} a nombre de ${c.asegurado}. `
+      + 'El recibo queda pendiente de cobro. ¿Continuar?';
+    if (!window.confirm(aviso)) return;
+    const clase = prm.clases[rcg.clase];
+    const r = await emitir(armarEmisionPlan({
+      plan, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
+      apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
+      bien: [
+        c.asegurado,
+        c.ubicacion,
+        [clase?.etiqueta, rcg.indole].filter(Boolean).join(' · '),
+        [rcg.actividadEspecifica, k.esContrato ? `Contrato ${k.numero}: ${k.objeto} (coasegurado ${k.coasegurado})` : ''].filter(Boolean).join(' · '),
+      ],
+      pep, cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+    }));
+    if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
+  };
+
+  if (emision) {
+    return (
+      <SectionCard title="Póliza emitida en Sis2000 QA" Icon={FileCheck2} statusLabel="Emitida" statusTone="success">
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Dato label="N.º de póliza">{emision.cnpoliza}</Dato>
+          <Dato label="N.º de recibo">{emision.cnrecibo}</Dato>
+          <Dato label="Documento">
+            {emision.urlpoliza
+              ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={emision.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a>
+              : '—'}
+          </Dato>
+        </div>
+        <p className="text-[0.72rem] text-slate-500 mt-3">Recibo pendiente de cobro en Sis2000.</p>
+      </SectionCard>
+    );
+  }
+
+  return (
+    <SectionCard title="Emitir en Sis2000 QA" description="Partner patrimonial de nest-api (el mismo de Emisión)." Icon={habilitada ? FileCheck2 : Lock}
+      statusLabel={habilitada ? 'Solo QA' : 'Deshabilitada'} statusTone="warning">
+      <div className="space-y-3">
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={pep} onChange={(e) => setPep(e.target.checked)} />
+          El tomador es persona políticamente expuesta (PEP).
+        </label>
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} />
+          El tomador declara que la información es veraz y acepta los Términos y Condiciones.
+        </label>
+        {error && <Aviso tono="error">{error}</Aviso>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="primary" size="lg" disabled={!habilitada || !acepta || !plan || emitiendo} onClick={() => void emitirAhora()}>
+            {emitiendo ? <Loader2 size={15} className="animate-spin" /> : <FileCheck2 size={15} />}
+            {emitiendo ? 'Emitiendo…' : 'Emitir en Sis2000 QA'}
+          </Button>
+          <p className="text-[0.78rem] text-slate-500 max-w-md">
+            {habilitada
+              ? 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. Antes de producción debe pasar por Pagos.'
+              : 'Para probar: VITE_RCG_PLANES_EMITIR=1 en .env.local (con NEST_API_URL de QA) y reiniciar npm run dev.'}
+          </p>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
 

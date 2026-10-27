@@ -1,4 +1,4 @@
-import { Building2, Check, HardHat, Layers } from 'lucide-react';
+import { Building2, Check, FlaskConical, HardHat, Layers } from 'lucide-react';
 import { SectionCard } from '../components/ui/SectionCard';
 import { StepActions } from '../components/ui/StepActions';
 import { cn } from '../lib/utils';
@@ -15,6 +15,10 @@ const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; 
     id: 'rc', nombre: 'RC Patronal / Empresarial', detalle: 'RCP · RCE', Icon: HardHat,
     desc: 'Responsabilidad del patrono frente a sus trabajadores (LOPCYMAT), calculada sobre la nómina anual.',
   },
+  {
+    id: 'planes', nombre: 'Planes RCG Sis2000', detalle: 'Prueba · PLANI · PLANII · PLAN3', Icon: FlaskConical,
+    desc: 'Los planes de RC General configurados en Sis2000, con las reglas del RCG. Cotiza en línea y emite en QA.',
+  },
 ];
 
 const MODOS: [Modo, string][] = [['p', 'Solo Patronal (RCP)'], ['e', 'Solo Empresarial (RCE)'], ['both', 'Patronal + Empresarial']];
@@ -28,7 +32,7 @@ export function ProductoStep() {
   return (
     <div className="space-y-5">
       <SectionCard title="Ramo de Responsabilidad Civil" description="Selecciona el producto que deseas cotizar." Icon={Layers}>
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {PRODUCTOS.map((p) => {
             const active = producto === p.id;
             return (
@@ -82,7 +86,7 @@ export function ProductoStep() {
       </SectionCard>
 
       <StepActions onContinue={() => {
-        if (!producto) { toast.warning('Selecciona un producto', 'Elige RC General o RC Patronal / Empresarial.'); return false; }
+        if (!producto) { toast.warning('Selecciona un producto', 'Elige RC General, RC Patronal / Empresarial o los planes de Sis2000.'); return false; }
         return true;
       }} />
     </div>
