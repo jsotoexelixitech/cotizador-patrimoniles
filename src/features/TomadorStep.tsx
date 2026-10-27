@@ -29,10 +29,10 @@ function validar(s: CotizacionState): Errores {
   if (rcg && c.correoEmisor && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Correo con formato inválido.';
   // Emitir en Sis2000 exige identificación (RIF/cédula hasta 9 dígitos), teléfono y dirección.
   if (producto === 'planes') {
-    const digitos = c.documento.replace(/D/g, '');
+    const digitos = c.documento.replace(/\D/g, '');
     if (!digitos || digitos.length > 9) e.documento = 'Indica el RIF o la cédula (hasta 9 dígitos).';
     if (esPersonaNatural(c.tipoDoc) && !c.apellido.trim()) e.apellido = 'Indica el apellido.';
-    if (!/^d{10,15}$/.test(c.telefono.replace(/D/g, ''))) e.telefono = 'Indica un teléfono válido (ej. 0412 1234567).';
+    if (!/^\d{10,15}$/.test(c.telefono.replace(/\D/g, ''))) e.telefono = 'Indica un teléfono válido (ej. 0412 1234567).';
     if (!c.ubicacion.trim()) e.ubicacion = 'Indica la dirección del riesgo.';
   }
   if (k.esContrato) {
