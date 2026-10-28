@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { cotizarPlan, emitirPlan, listarPlanes } from '../api/patrimonial';
+import { cotizarPlan, emitirCondominio, emitirPlan, listarPlanes, tarificarRamo } from '../api/patrimonial';
+import type { PlanTarifa, TasaCobertura } from '../tarifas/coberturas';
 import { parsearCotizacionPlan, type PlanSis2000, type RamoCatalogo, type ResultadoEmision } from '../tarifas/planes-rcg';
 
 interface PlanesState {
@@ -12,17 +13,24 @@ interface PlanesState {
   planes: PlanSis2000[];
   cargando: boolean;
   error: string | null;
+  /** Tarificador por coberturas del plan elegido (ramos 16 y 38). */
+  tarifa: { cramo: number; cplan: string; plan: PlanTarifa | null; tasas: TasaCobertura[] } | null;
+  cargandoTarifa: boolean;
+  errorTarifa: string | null;
   emitiendo: boolean;
   emision: ResultadoEmision | null;
+  cargarTarifa: (cramo: number, cplan: string) => Promise<void>;
   cargarRamos: () => Promise<void>;
   cargar: (cramo: number) => Promise<void>;
-  emitir: (payload: unknown) => Promise<ResultadoEmision | null>;
+  /** patrimonial = plan cerrado (partner); condominio = coberturas elegidas (cotización preestablecida). */
+  emitir: (payload: unknown, via?: 'patrimonial' | 'condominio') => Promise<ResultadoEmision | null>;
   reset: () => void;
 }
 
 const inicial = {
   ramos: [], cargandoRamos: false, errorRamos: null,
-  ramoCotizado: null, planes: [], cargando: false, error: null, emitiendo: false, emision: null,
+  ramoCotizado: null, planes: [], cargando: false, error: null,
+  tarifa: null, cargandoTarifa: false, errorTarifa: null, emitiendo: false, emision: null,
 };
 
 export const usePlanesStore = create<PlanesState>((set, get) => ({
@@ -48,10 +56,21 @@ export const usePlanesStore = create<PlanesState>((set, get) => ({
       error: fallas.length ? fallas.join(' · ') : null,
     });
   },
-  emitir: async (payload) => {
+  cargarTarifa: async (cramo, cplan) => {
+    const t = get().tarifa;
+    if (get().cargandoTarifa || (t && t.cramo === cramo && t.cplan === cplan && t.plan)) return;
+    set({ cargandoTarifa: true, errorTarifa: null });
+    try {
+      const r = await tarificarRamo(cramo, cplan);
+      set({ tarifa: { cramo, cplan, ...r }, cargandoTarifa: false, errorTarifa: r.plan ? null : 'El tarificador no tiene coberturas para este plan.' });
+    } catch (e) {
+      set({ cargandoTarifa: false, errorTarifa: e instanceof Error ? e.message : String(e) });
+    }
+  },
+  emitir: async (payload, via = 'patrimonial') => {
     set({ emitiendo: true, error: null });
     try {
-      const emision = await emitirPlan(payload);
+      const emision = await (via === 'condominio' ? emitirCondominio(payload) : emitirPlan(payload));
       set({ emitiendo: false, emision });
       return emision;
     } catch (e) {
@@ -60,5 +79,5 @@ export const usePlanesStore = create<PlanesState>((set, get) => ({
     }
   },
   // El catálogo se conserva: solo se limpia lo cotizado y la emisión.
-  reset: () => set({ ramoCotizado: null, planes: [], cargando: false, error: null, emitiendo: false, emision: null }),
+  reset: () => set({ ramoCotizado: null, planes: [], cargando: false, error: null, tarifa: null, errorTarifa: null, emitiendo: false, emision: null }),
 }));

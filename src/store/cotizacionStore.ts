@@ -26,14 +26,16 @@ export interface CotizacionState {
   comun: {
     asegurado: string; tipoDoc: string; documento: string; correo: string; intermediario: string; ubicacion: string;
     sucursal: string; emisor: string; correoEmisor: string;
-    /** Solo para emitir planes en Sis2000. */
-    apellido: string; telefono: string;
+    /** Solo para emitir planes en Sis2000 (apartamento: ramo 38, clave cédula + plan + unidad). */
+    apellido: string; telefono: string; apartamento: string;
   };
   contrato: { esContrato: boolean; numero: string; objeto: string; coasegurado: string; vigencia: string };
   rcg: { moneda: MonedaRcg; clase: number; indole: string; actividadEspecifica: string; limite: string; tasa: string; condiciones: number[]; opcion: 'I' | 'II' | 'III' };
   /** Ramo y plan Sis2000 elegidos en la opción planes. */
   ramoSel: number | null;
   planSel: string;
+  /** Ramos 16 y 38: suma de la cobertura básica y coberturas elegidas (ccober; null = todas las del plan). */
+  coberturas: { sumaBasica: string; elegidas: string[] | null };
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
     claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
@@ -46,6 +48,7 @@ export interface CotizacionState {
   setRcProducto: (k: K, c: Partial<ProductoForm>) => void;
   setRamoSel: (cramo: number) => void;
   setPlanSel: (cplan: string) => void;
+  setCoberturas: (c: Partial<CotizacionState['coberturas']>) => void;
   reset: () => void;
 }
 
@@ -58,11 +61,12 @@ const productoInicial = (k: K): ProductoForm => ({
 
 const inicial = () => ({
   producto: null,
-  comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '', apellido: '', telefono: '' },
+  comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '', apellido: '', telefono: '', apartamento: '' },
   contrato: { esContrato: false, numero: '', objeto: '', coasegurado: '', vigencia: 'Anual' },
   rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: useParametrosStore.getState().rcg.clases[0] ? String(tasaPromedio(useParametrosStore.getState().rcg.clases[0])) : '', condiciones: [], opcion: 'I' as const },
   ramoSel: null as number | null,
   planSel: '',
+  coberturas: { sumaBasica: '', elegidas: null as string[] | null },
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
     claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
@@ -77,8 +81,9 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
   setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c } })),
   setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c } })),
   setRcProducto: (k, c) => set((s) => ({ rc: { ...s.rc, [k]: { ...s.rc[k], ...c } } })),
-  setRamoSel: (ramoSel) => set((s) => (s.ramoSel === ramoSel ? {} : { ramoSel, planSel: '' })),
-  setPlanSel: (planSel) => set({ planSel }),
+  setRamoSel: (ramoSel) => set((s) => (s.ramoSel === ramoSel ? {} : { ramoSel, planSel: '', coberturas: { sumaBasica: '', elegidas: null } })),
+  setPlanSel: (planSel) => set((s) => (s.planSel === planSel ? {} : { planSel, coberturas: { sumaBasica: '', elegidas: null } })),
+  setCoberturas: (c) => set((s) => ({ coberturas: { ...s.coberturas, ...c } })),
   reset: () => set(inicial()),
 }));
 

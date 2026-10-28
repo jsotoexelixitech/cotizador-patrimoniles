@@ -15,6 +15,8 @@ import { RAMO_RCG, armarEmisionPlan, primasTarifaRcg } from '../tarifas/planes-r
 import { Aviso } from '../components/ui/Aviso';
 import { TablaCoberturas, TotalRc } from './CotizacionStep';
 import { esPersonaNatural } from './TomadorStep';
+import { armarEmisionCoberturas } from '../tarifas/coberturas';
+import { useCotizacionCoberturas } from '../store/coberturasHook';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -36,6 +38,7 @@ export function EmisionStep() {
   const ramos = usePlanesStore((p) => p.ramos);
   const cotRcg = useCotizacionRcg();
   const cotPlanes = useCotizacionPlanesRcg(listaPlanes[0]?.suma);
+  const cobCot = useCotizacionCoberturas();
   const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
   const [generando, setGenerando] = useState(false);
   // Número provisional hasta tener el correlativo oficial desde el backend.
@@ -78,8 +81,12 @@ export function EmisionStep() {
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
         ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
         sucursal: c.sucursal, elaboradoPor: c.emisor,
-        alternativas: [{ opcion: 'I', limite: plan.suma, prima: plan.prima, primaMinimaAplicada: false }],
-        coberturas: plan.coberturas.map((x) => ({ nombre: x.nombre, montos: [x.suma] })),
+        alternativas: [cobCot
+          ? { opcion: 'I', limite: cobCot.cot.suma_asegurada, prima: cobCot.cot.prima_total, primaMinimaAplicada: false }
+          : { opcion: 'I', limite: plan.suma, prima: plan.prima, primaMinimaAplicada: false }],
+        coberturas: cobCot
+          ? cobCot.cot.coberturas.map((x) => ({ nombre: `${x.nombre} (prima ${importe(x.prima)})`, montos: [x.suma_asegurada] }))
+          : plan.coberturas.map((x) => ({ nombre: x.nombre, montos: [x.suma] })),
         deducible: esRcg ? cotPlanes.deducible : '', notaIgtf: true, condiciones: esRcg ? cotPlanes.condiciones : [], vigenciaDias,
         plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg },
       }, await cargarAssetsRcg());
@@ -163,6 +170,7 @@ function ResumenPlan() {
   const planes = usePlanesStore((p) => p.planes);
   const ramos = usePlanesStore((p) => p.ramos);
   const cot = useCotizacionPlanesRcg(planes[0]?.suma);
+  const cobCot = useCotizacionCoberturas();
   const plan = planes.find((p) => p.cplan === planSel);
   if (!plan) return <Aviso tono="error">No hay plan elegido: vuelve al paso de cotización.</Aviso>;
   const esRcg = plan.cramo === RAMO_RCG;
@@ -174,13 +182,15 @@ function ResumenPlan() {
     <SectionCard title={`${plan.nombre} · Sis2000`} Icon={ShieldCheck} statusLabel={plan.cplan}
       description={esRcg ? `${rcg.indole} · ${rcg.actividadEspecifica} · tasa ${porcentaje(Number(rcg.tasa))}` : `${xramo} · ${rcg.actividadEspecifica}`}>
       <div className="grid sm:grid-cols-4 gap-4 mb-4">
-        <Dato label="Suma asegurada">{usd(plan.suma)}</Dato>
-        <Dato label="Prima Sis2000 (se emite)">{usd(plan.prima)}</Dato>
+        <Dato label="Suma asegurada">{usd(cobCot ? cobCot.cot.suma_asegurada : plan.suma)}</Dato>
+        <Dato label={cobCot ? 'Prima por coberturas (se emite)' : 'Prima Sis2000 (se emite)'}>{usd(cobCot ? cobCot.cot.prima_total : plan.prima)}</Dato>
         {esRcg ? <Dato label="Prima tarifa RCG (referencia)">{tarifa ? usd(tarifa.prima) : '—'}</Dato> : <Dato label="Ramo">{xramo}</Dato>}
         <Dato label="Vigencia">Anual</Dato>
       </div>
       <ul className="text-[0.78rem] text-slate-600 grid sm:grid-cols-2 gap-x-6 gap-y-0.5 list-disc pl-5">
-        {plan.coberturas.map((x) => <li key={x.nombre}>{x.nombre} · {importe(x.suma)}</li>)}
+        {cobCot
+          ? cobCot.cot.coberturas.map((x) => <li key={x.ccober}>{x.nombre} · {importe(x.suma_asegurada)} · prima {importe(x.prima)}</li>)
+          : plan.coberturas.map((x) => <li key={x.nombre}>{x.nombre} · {importe(x.suma)}</li>)}
       </ul>
       {esRcg && <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible:</strong> {cot.deducible}</p>}
     </SectionCard>
@@ -196,13 +206,25 @@ function EmitirPlan() {
   const [pep, setPep] = useState(false);
   const habilitada = import.meta.env.VITE_RCG_PLANES_EMITIR === '1';
   const plan = planes.find((p) => p.cplan === s.planSel);
+  const cobCot = useCotizacionCoberturas();
   const { comun: c, contrato: k, rcg } = s;
 
   const emitirAhora = async () => {
     if (!plan) return;
-    const aviso = `Se emitirá en Sis2000 QA ${plan.nombre} (${plan.cplan}) por USD ${importe(plan.prima)} a nombre de ${c.asegurado}. `
+    const prima = cobCot ? cobCot.cot.prima_total : plan.prima;
+    const aviso = `Se emitirá en Sis2000 QA ${plan.nombre} (${plan.cplan}) por USD ${importe(prima)} a nombre de ${c.asegurado}. `
       + 'El recibo queda pendiente de cobro. ¿Continuar?';
     if (!window.confirm(aviso)) return;
+    const cproductor = Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080;
+    if (cobCot) {
+      const r = await emitir(armarEmisionCoberturas({
+        cramo: plan.cramo, cplan: plan.cplan, cot: cobCot.cot, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
+        apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
+        bien: rcg.actividadEspecifica, apartamento: Number(c.apartamento) || undefined, cproductor,
+      }), 'condominio');
+      if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
+      return;
+    }
     const clase = prm.clases[rcg.clase];
     const r = await emitir(armarEmisionPlan({
       plan, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
@@ -213,7 +235,7 @@ function EmitirPlan() {
         plan.cramo === RAMO_RCG ? [clase?.etiqueta, rcg.indole].filter(Boolean).join(' · ') : '',
         [rcg.actividadEspecifica, k.esContrato ? `Contrato ${k.numero}: ${k.objeto} (coasegurado ${k.coasegurado})` : ''].filter(Boolean).join(' · '),
       ],
-      pep, cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+      pep, cproductor,
     }));
     if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
   };
@@ -236,7 +258,7 @@ function EmitirPlan() {
   }
 
   return (
-    <SectionCard title="Emitir en Sis2000 QA" description="Partner patrimonial de nest-api (el mismo de Emisión)." Icon={habilitada ? FileCheck2 : Lock}
+    <SectionCard title="Emitir en Sis2000 QA" description={cobCot ? 'Cobertura por cobertura (nest-api condominio/emision).' : 'Partner patrimonial de nest-api (el mismo de Emisión).'} Icon={habilitada ? FileCheck2 : Lock}
       statusLabel={habilitada ? 'Solo QA' : 'Deshabilitada'} statusTone="warning">
       <div className="space-y-3">
         <label className="flex items-start gap-2 text-sm text-slate-700">

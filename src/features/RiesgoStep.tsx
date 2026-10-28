@@ -20,11 +20,18 @@ export function RiesgoStep() {
   return producto === 'rc' ? <RiesgoRc /> : <RiesgoRcg />;
 }
 
+const intentoApto = (pide: boolean, apto: string) => (pide && !(Number(apto) > 0) ? 'Indica el número de apartamento o unidad.' : undefined);
+
 /** Ramos de Sis2000 distintos del RCG: no hay tarifa por clase, solo la descripción del riesgo para la póliza. */
 function RiesgoPlan() {
   const rcg = useCotizacionStore((s) => s.rcg);
   const setRcg = useCotizacionStore((s) => s.setRcg);
   const ramoSel = useCotizacionStore((s) => s.ramoSel);
+  const apartamento = useCotizacionStore((s) => s.comun.apartamento);
+  const setComun = useCotizacionStore((s) => s.setComun);
+  // Hogar (38): Sis2000 identifica la póliza por cédula + plan + apartamento.
+  const pideApto = ramoSel === 38;
+  const errorApto = intentoApto(pideApto, apartamento);
   const xramo = usePlanesStore((s) => s.ramos.find((r) => r.cramo === ramoSel)?.xramo);
   const [intento, setIntento] = useState(false);
   const error = intento && !rcg.actividadEspecifica.trim() ? 'Describe el bien o la actividad asegurada.' : undefined;
@@ -34,13 +41,21 @@ function RiesgoPlan() {
       <SectionCard title="Riesgo asegurado" description={xramo ? `Ramo ${xramo}` : undefined} Icon={Building2}>
         <Field label="Bien o actividad asegurada" full error={error}
           hint="Va en la descripción del bien de la póliza (p. ej. nombre y matrícula de la embarcación, o el inmueble).">
-          <Input value={rcg.actividadEspecifica} maxLength={250} onChange={(e) => setRcg({ actividadEspecifica: e.target.value })} placeholder="Ej. Lancha «La Gaviota», matrícula AGSP-1234" />
+          <Input value={rcg.actividadEspecifica} maxLength={250} onChange={(e) => setRcg({ actividadEspecifica: e.target.value })} placeholder="Ej. Apartamento 5-B, Residencias Los Palos Grandes" />
         </Field>
+        {pideApto && (
+          <div className="grid sm:grid-cols-3 gap-4 mt-4">
+            <Field label="N.º de apartamento / unidad" error={intento ? errorApto : undefined} hint="Solo números. Sis2000 identifica la póliza por cédula + plan + unidad.">
+              <Input inputMode="numeric" maxLength={6} value={apartamento} onChange={(e) => setComun({ apartamento: e.target.value.replace(/D/g, '') })} placeholder="Ej. 52" />
+            </Field>
+          </div>
+        )}
       </SectionCard>
 
       <StepActions onContinue={() => {
         setIntento(true);
         if (!rcg.actividadEspecifica.trim()) { toast.error('Revisa el riesgo', 'Describe el bien o la actividad asegurada.'); return false; }
+        if (errorApto) { toast.error('Revisa el riesgo', errorApto); return false; }
         return true;
       }} />
     </div>
