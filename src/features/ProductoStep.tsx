@@ -12,16 +12,16 @@ import type { Modo } from '../tarifas/rcp-rce';
 
 const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; Icon: typeof Building2 }[] = [
   {
-    id: 'rcg', nombre: 'Responsabilidad Civil General', detalle: 'Ramo 28 · Producto 89', Icon: Building2,
-    desc: 'Daños a terceros por la actividad del asegurado. Tres opciones de límite (I, II y III), con o sin contrato.',
+    id: 'rcg', nombre: 'Responsabilidad Civil General', detalle: 'Tarifa RCG · igual al cotizador de Google', Icon: Building2,
+    desc: 'Daños a terceros por la actividad del asegurado. Tú defines límite y tasa; tres opciones (I, II y III), con o sin contrato.',
   },
   {
-    id: 'rc', nombre: 'RC Patronal / Empresarial', detalle: 'RCP · RCE', Icon: HardHat,
+    id: 'rc', nombre: 'RC Patronal / Empresarial', detalle: 'RCP · RCE · igual al cotizador de Google', Icon: HardHat,
     desc: 'Responsabilidad del patrono frente a sus trabajadores (LOPCYMAT), calculada sobre la nómina anual.',
   },
   {
-    id: 'planes', nombre: 'Planes Sis2000', detalle: 'Prueba · Riesgos generales', Icon: FlaskConical,
-    desc: 'Los planes configurados en Sis2000 (naves, combinados, RC General…). Los planes nuevos aparecen solos. Cotiza en línea y emite en QA.',
+    id: 'planes', nombre: 'Planes Sis2000', detalle: 'Planes con precio fijo · todos los ramos', Icon: FlaskConical,
+    desc: 'Los planes que La Mundial tiene cargados en Sis2000 (naves, combinados, RC General…), con su suma y prima. Los nuevos aparecen solos. Emite en QA.',
   },
 ];
 
@@ -42,7 +42,7 @@ export function ProductoStep() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Ramo de Responsabilidad Civil" description="Selecciona el producto que deseas cotizar." Icon={Layers}>
+      <SectionCard title="¿Qué deseas cotizar?" description="Tarifa del cotizador (RCG o RCP/RCE) o un plan ya configurado en Sis2000." Icon={Layers}>
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {PRODUCTOS.map((p) => {
             const active = producto === p.id;
