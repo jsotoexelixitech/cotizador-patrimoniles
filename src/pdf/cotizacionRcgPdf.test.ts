@@ -31,4 +31,18 @@ describe('PDF de cotización RCG', () => {
     const pdf = await PDFDocument.load(bytes);
     expect(pdf.getPageCount()).toBe(5);
   });
+
+  it('plan de Sis2000 de otro ramo: cotización sin la solicitud RCG', async () => {
+    const nombres = ['COMBINADO RESIDENCIAL (BÁSICA)', 'TERREMOTO', 'DAÑOS POR AGUA', 'ROBO, ASALTO Y ATRACO', 'ROTURA DE VIDRIOS', 'RESPONSABILIDAD CIVIL'];
+    const bytes = await generarPdfRcg({
+      numero: 'RCG-2026-P123456', fecha: new Date(2026, 9, 28), asegurado: 'Juan Pérez', rif: 'V-12345678', moneda: 'USD',
+      indole: '', actividadEspecifica: 'Apartamento en Los Palos Grandes', correo: 'juan@correo.com', intermediario: '',
+      ubicacion: 'Caracas', esContrato: false, numeroContrato: '', objetoObra: '', coasegurado: '', sucursal: 'Caracas',
+      elaboradoPor: 'prueba', alternativas: [{ opcion: 'I', limite: 140000, prima: 228, primaMinimaAplicada: false }],
+      coberturas: nombres.map((nombre, i) => ({ nombre, montos: [140000 / (i + 1)] })), deducible: '', notaIgtf: true, condiciones: [],
+      plan: { ramo: 'COMBINADO RESIDENCIAL', nombre: 'Plan II 100.000 Combinado Residencial', cplan: '2', esRcg: false },
+    }, assets);
+    if (process.env.PDF_SALIDA_PLAN) writeFileSync(process.env.PDF_SALIDA_PLAN, bytes);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2);
+  });
 });

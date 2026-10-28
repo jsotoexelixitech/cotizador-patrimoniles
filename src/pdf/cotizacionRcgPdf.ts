@@ -1,4 +1,6 @@
 // PDF oficial de cotización RCG: 2 páginas de cotización + 3 páginas de la Solicitud de Seguro RCG.
+// Con `plan` genera el mismo documento para un plan de Sis2000 (una sola columna: la suma y la prima del plan);
+// la Solicitud de Seguro RCG solo se agrega en el ramo 28.
 // Replica el documento del Apps Script de La Mundial (mismo logo, sello, textos y plantilla de solicitud),
 // pero en texto vectorial con pdf-lib en lugar de capturas html2canvas.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
@@ -28,6 +30,16 @@ export interface DatosPdfRcg {
   condiciones: string[];
   /** Días de validez (15 por defecto). */
   vigenciaDias?: number;
+  /** Plan de Sis2000 cotizado (opción Planes Sis2000). */
+  plan?: PlanPdf;
+}
+
+export interface PlanPdf {
+  ramo: string;
+  nombre: string;
+  cplan: string;
+  /** Ramo 28: se conservan los textos del RCG y la Solicitud de Seguro. */
+  esRcg: boolean;
 }
 
 export interface AssetsPdfRcg {
@@ -73,6 +85,9 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   const logo = await doc.embedJpg(a.logo);
   const sello = await doc.embedPng(a.sello);
   const fuente = (b?: boolean) => (b ? bold : regular);
+  const plan = d.plan;
+  const generico = !!plan && !plan.esRcg;
+  const producto = generico ? plan.ramo : 'Responsabilidad Civil General';
 
   let page!: PDFPage;
   let y = TOP;
@@ -130,7 +145,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
       yy -= 11;
     };
     etiqueta('Fecha:', fechaCorta(d.fecha));
-    etiqueta('Ref:', `COT-RCG-${anio}`);
+    etiqueta('Ref:', `${plan ? `COT-${plan.cplan}` : 'COT-RCG'}-${anio}`);
     yy -= 2;
     derecha(p, `Cotización N.º: ${d.numero}`, R, yy, 9.5, bold, C.texto);
     const yl = TOP - lh - 18;
@@ -140,7 +155,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
 
   function pie(p: PDFPage) {
     linea(p, L, 48, R, 48, 0.6, C.filete);
-    texto(p, 'La Mundial de Seguros, C.A. · Responsabilidad Civil General', L, 38, 7, regular, C.gris);
+    texto(p, `La Mundial de Seguros, C.A. · ${producto}`, L, 38, 7, regular, C.gris);
     derecha(p, `Cotización elaborada por: ${d.elaboradoPor}`, R, 38, 7, regular, C.gris);
   }
 
@@ -178,9 +193,9 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   nuevaPagina();
 
   // Título
-  const titulo = 'COTIZACIÓN DE RESPONSABILIDAD CIVIL GENERAL';
+  const titulo = `COTIZACIÓN DE ${producto.toUpperCase()}`;
   texto(page, titulo, (W - ancho(titulo, 12, bold)) / 2, y - 10, 12, bold, C.navy);
-  const sub = '(Predios y Operaciones)';
+  const sub = plan ? `(${plan.nombre} · ${plan.cplan})` : '(Predios y Operaciones)';
   texto(page, sub, (W - ancho(sub, 7.5)) / 2, y - 22, 7.5, regular, C.gris);
   y -= 32;
 
@@ -192,8 +207,10 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     const filas: (Seg[] | [Seg[], Seg[]] | 'sep')[] = [
       [[{ t: 'Tomador / Asegurado:', b: true }, { t: d.asegurado }], [{ t: 'Moneda de Cuenta:', b: true }, { t: d.moneda }]],
       [{ t: 'Cédula o RIF:', b: true }, { t: d.rif || 'N/A' }],
-      [{ t: 'Índole:', b: true }, { t: d.indole }],
-      [{ t: 'Índole específica:', b: true }, { t: d.actividadEspecifica }],
+      ...(generico
+        ? [[{ t: 'Plan:', b: true }, { t: `${plan.nombre} (${plan.cplan})` }], [{ t: 'Bien o actividad asegurada:', b: true }, { t: d.actividadEspecifica }]] as Seg[][]
+        : [[{ t: 'Índole:', b: true }, { t: d.indole }], [{ t: 'Índole específica:', b: true }, { t: d.actividadEspecifica }],
+          ...(plan ? [[{ t: 'Plan:', b: true }, { t: `${plan.nombre} (${plan.cplan})` }]] : [])] as Seg[][]),
       'sep',
       [[{ t: 'Correo electrónico:', b: true }, { t: d.correo || 'N/A' }], [{ t: 'Intermediario:', b: true }, { t: d.intermediario || 'N/A' }]],
       [{ t: 'Ubicación del riesgo:', b: true }, { t: d.ubicacion || 'N/A' }],
@@ -231,7 +248,8 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   // Interés asegurable
   texto(page, 'INTERÉS ASEGURABLE', L, y - 10, 10, bold, C.navy);
   y -= 16;
-  parrafo([{ t: 'Ampara la Responsabilidad Civil General en que pueda incurrir el asegurado frente a terceros por lesiones corporales y/o daños a la propiedad, por los cuales sea legalmente responsable y obligado a pagar mediante sentencia firme y sujeto a los límites, términos y condiciones de la póliza a emitir, derivada de las operaciones que realiza el Asegurado o bajo el contrato indicado.' }], 8.5, { justificar: true, despues: 8 });
+  if (generico) parrafo([{ t: `Ampara los riesgos descritos en las coberturas del ${plan.nombre}, hasta las sumas aseguradas indicadas y sujeto a los límites, términos y condiciones de la póliza a emitir.` }], 8.5, { justificar: true, despues: 8 });
+  else parrafo([{ t: 'Ampara la Responsabilidad Civil General en que pueda incurrir el asegurado frente a terceros por lesiones corporales y/o daños a la propiedad, por los cuales sea legalmente responsable y obligado a pagar mediante sentencia firme y sujeto a los límites, términos y condiciones de la póliza a emitir, derivada de las operaciones que realiza el Asegurado o bajo el contrato indicado.' }], 8.5, { justificar: true, despues: 8 });
 
   // Tabla de límites por opción
   {
@@ -245,21 +263,21 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     texto(page, sa, xCol(0) + (colOp * n - ancho(sa, s, bold)) / 2, y - 10.5, s, bold, C.blanco);
     y -= h;
     celda(page, L, y, colPrim, h, C.encabezado);
-    texto(page, 'Límite máximo de responsabilidad por evento / Año Póliza', L + 4, y - 10.5, s, bold, C.tinta);
+    texto(page, plan ? 'Suma asegurada del plan / Año Póliza' : 'Límite máximo de responsabilidad por evento / Año Póliza', L + 4, y - 10.5, s, bold, C.tinta);
     d.alternativas.forEach((alt, i) => {
       celda(page, xCol(i), y, colOp, h, C.encabezado);
-      const t = `OPCIÓN ${alt.opcion}`;
+      const t = plan ? (/^PLAN/i.test(plan.cplan) ? plan.cplan : `PLAN ${plan.cplan}`) : `OPCIÓN ${alt.opcion}`;
       texto(page, t, xCol(i) + (colOp - ancho(t, s, bold)) / 2, y - 10.5, s, bold, C.tinta);
     });
     y -= h;
     celda(page, L, y, colPrim, h, C.suave);
-    texto(page, 'R.C. Predios y Operaciones', L + 4, y - 10.5, s, regular, C.tinta);
+    texto(page, generico ? plan.nombre : 'R.C. Predios y Operaciones', L + 4, y - 10.5, s, regular, C.tinta);
     d.alternativas.forEach((alt, i) => {
       celda(page, xCol(i), y, colOp, h, C.suave);
       derecha(page, importe(alt.limite), xCol(i) + colOp - 4, y - 10.5, s, regular, C.tinta);
     });
     y -= h + 10;
-    texto(page, 'Alternativas independientes. La prima corresponde exclusivamente a la opción elegida.', L, y, 6.5, regular, C.gris);
+    texto(page, plan ? 'Plan configurado en Sis2000: suma, prima y coberturas fijas del plan.' : 'Alternativas independientes. La prima corresponde exclusivamente a la opción elegida.', L, y, 6.5, regular, C.gris);
     y -= 14;
   }
 
@@ -285,7 +303,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   }
 
   // Deducible
-  {
+  if (d.deducible) {
     const size = 8;
     const lineas = partir([{ t: 'Deducibles Aplicables (Daños Materiales):', b: true }, { t: d.deducible }], CW - 20, size);
     const alto = lineas.length * 11 + 14;
@@ -298,7 +316,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   // Primas por opción
   {
     asegurar(26);
-    texto(page, 'Prima a cobrar según la opción', L + 4, y - 10, 8, bold, C.tinta);
+    texto(page, plan ? 'Prima anual del plan' : 'Prima a cobrar según la opción', L + 4, y - 10, 8, bold, C.tinta);
     d.alternativas.forEach((alt, i) => derecha(page, importe(alt.prima), xCol(i) + colOp - 4, y - 10, 8, bold, C.tinta));
     y -= 18;
     linea(page, L, y, R, y, 1.4, C.primaLinea);
@@ -309,14 +327,16 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     parrafo([{ t: 'Cotización no incluye 3% del Impuesto de Grandes Transacciones Financieras (IGTF), tomar en cuenta al momento de pagar la prima.', b: true }], 8, { color: C.tinta, despues: 6 });
   }
 
-  asegurar(30);
-  texto(page, 'CONDICIONES ESPECIALES', L, y - 8, 7, bold, C.tinta);
-  y -= 12;
-  for (const c of d.condiciones) parrafo([{ t: c }], 6.5, { color: C.tinta, despues: 1 });
+  if (d.condiciones.length) {
+    asegurar(30);
+    texto(page, 'CONDICIONES ESPECIALES', L, y - 8, 7, bold, C.tinta);
+    y -= 12;
+    for (const c of d.condiciones) parrafo([{ t: c }], 6.5, { color: C.tinta, despues: 1 });
+  }
 
   // ================= PÁGINA 2 =================
   nuevaPagina();
-  parrafo([{ t: 'Exclusiones:', b: true }, { t: 'Las indicadas en las Condiciones Generales y Particulares y anexo de coberturas de la Póliza de Responsabilidad Civil General, aprobados por la Superintendencia de la Actividad Aseguradora.' }], 9, { justificar: true, despues: 8 });
+  parrafo([{ t: 'Exclusiones:', b: true }, { t: `Las indicadas en las Condiciones Generales y Particulares y anexo de coberturas de la Póliza de ${producto}, aprobados por la Superintendencia de la Actividad Aseguradora.` }], 9, { justificar: true, despues: 8 });
   parrafo([{ t: 'Ley y Jurisdicción:', b: true }, { t: 'Este seguro se regirá y queda sometido exclusivamente al ordenamiento jurídico y a la jurisdicción de los tribunales de Caracas - Venezuela.' }], 9, { justificar: true, despues: 8 });
   const dias = d.vigenciaDias ?? 15;
   parrafo([{ t: `Cotización válida por ${dias === 15 ? 'quince (15)' : dias} días continuos.`, b: true }], 9, { despues: 14 });
@@ -403,7 +423,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
 
   const escalaX = 215.9 / 1020;
   const escalaY = 279.4 / 1320;
-  for (let i = 0; i < a.solicitud.length; i++) {
+  for (let i = 0; i < (generico ? 0 : a.solicitud.length); i++) {
     const p = doc.addPage([W, H]);
     const img = await doc.embedPng(a.solicitud[i]);
     p.drawImage(img, { x: 0, y: 0, width: W, height: H });
@@ -428,9 +448,9 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     if (i === 2) dato(p, d.intermediario, 12, 63.5, 92, 8);
   }
 
-  doc.setTitle(`Cotización RCG ${d.numero} - ${limpiar(d.asegurado)}`);
+  doc.setTitle(`Cotización ${plan ? plan.cplan : 'RCG'} ${d.numero} - ${limpiar(d.asegurado)}`);
   doc.setAuthor('La Mundial de Seguros, C.A.');
-  doc.setSubject('Cotización de Responsabilidad Civil General');
+  doc.setSubject(`Cotización de ${producto}`);
   return doc.save();
 }
 

@@ -32,7 +32,10 @@ export function EmisionStep() {
   const rcg = s.producto === 'rcg';
   const planes = s.producto === 'planes';
   const resetPlanes = usePlanesStore((p) => p.reset);
+  const listaPlanes = usePlanesStore((p) => p.planes);
+  const ramos = usePlanesStore((p) => p.ramos);
   const cotRcg = useCotizacionRcg();
+  const cotPlanes = useCotizacionPlanesRcg(listaPlanes[0]?.suma);
   const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
   const [generando, setGenerando] = useState(false);
   // Número provisional hasta tener el correlativo oficial desde el backend.
@@ -54,6 +57,34 @@ export function EmisionStep() {
       }, await cargarAssetsRcg());
       descargarPdf(bytes, `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`);
       toast.success('Cotización descargada', `${numero} · 2 páginas de cotización + Solicitud de Seguro.`);
+    } catch (e) {
+      toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  /** Mismo PDF oficial con la suma, la prima y las coberturas del plan de Sis2000. */
+  const descargarPlan = async () => {
+    const plan = listaPlanes.find((p) => p.cplan === s.planSel);
+    if (!plan) { toast.error('No hay plan elegido', 'Vuelve al paso de cotización.'); return; }
+    const esRcg = plan.cramo === RAMO_RCG;
+    const ramo = ramos.find((r) => r.cramo === plan.cramo)?.xramo ?? `Ramo ${plan.cramo}`;
+    setGenerando(true);
+    try {
+      const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const bytes = await generarPdfRcg({
+        numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: 'USD',
+        indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
+        ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
+        sucursal: c.sucursal, elaboradoPor: c.emisor,
+        alternativas: [{ opcion: 'I', limite: plan.suma, prima: plan.prima, primaMinimaAplicada: false }],
+        coberturas: plan.coberturas.map((x) => ({ nombre: x.nombre, montos: [x.suma] })),
+        deducible: esRcg ? cotPlanes.deducible : '', notaIgtf: true, condiciones: esRcg ? cotPlanes.condiciones : [], vigenciaDias,
+        plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg },
+      }, await cargarAssetsRcg());
+      descargarPdf(bytes, `Cotizacion_LaMundial_${plan.cplan}_${c.asegurado.trim().replace(/\s+/g, '_') || 'plan'}.pdf`);
+      toast.success('Cotización descargada', `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}.`);
     } catch (e) {
       toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
     } finally {
@@ -99,13 +130,13 @@ export function EmisionStep() {
 
       <p className="text-[0.72rem] text-slate-500">
         Cotización válida por {rcg ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
-        {rcg && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
+        {(rcg || planes) && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
       </p>
 
       <StepActions continueLabel="" extra={(
         <>
-          {rcg ? (
-            <Button variant="primary" size="lg" onClick={descargarRcg} disabled={generando}>
+          {rcg || planes ? (
+            <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : descargarPlan} disabled={generando}>
               {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
               {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
             </Button>
