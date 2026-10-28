@@ -1,21 +1,25 @@
-// Planes RCG de Sis2000 (ramo 28 / producto 89) cotizados con las reglas del cotizador RCG.
+// Planes de riesgos generales de Sis2000 (ramos con ctiporamo 1 y 6), leídos de nest-api
+// (GET valrep/planes/riesgos-generales): los planes que La Mundial cree aparecen sin cambiar código.
 // Sis2000 cotiza con spCalculoRiesgoGeneral (suma y prima fijas por cobertura en maplantar) y emite con la
-// suma y la prima del plan: el trigger Emision_Riesgos pisa las que se envían. La prima de tarifa RCG
-// (suma del plan × tasa de la clase) es solo de referencia mientras La Mundial no cambie eso.
+// suma y la prima del plan: el trigger Emision_Riesgos pisa las que se envían. En el ramo 28 (RCG) la prima
+// de tarifa RCG (suma del plan × tasa de la clase) es solo de referencia mientras La Mundial no cambie eso.
 import { redondear } from './comun';
 import { PARAMETROS_RCG, type ParametrosRcg } from './rcg';
 
 export const RAMO_RCG = 28;
 
-/** IGEMA queda fuera: en mausuplan es exclusivo del productor 1051. */
-export const PLANES_RCG = [
-  { cplan: 'PLANI', nombre: 'Plan I' },
-  { cplan: 'PLANII', nombre: 'Plan II' },
-  { cplan: 'PLAN3', nombre: 'Plan III' },
-] as const;
+/** BINAC* son de RCV binacional (su propio flujo); IGEMA es exclusivo del productor 1051 en mausuplan. */
+export const PLANES_EXCLUIDOS: Record<number, string[]> = { 28: ['BINAC', 'BINACA', 'BINACB', 'IGEMA'] };
+
+/** Fila del catálogo de nest-api. `cotizable` = tiene coberturas con suma en maplantar. */
+export interface PlanCatalogo {
+  cramo: number; xramo: string; cplan: string; xplan: string; cproducto: string | null;
+  qcoberturas: number; msumamax: number; mprima: number; cotizable: boolean;
+}
+export interface RamoCatalogo { cramo: number; xramo: string; planes: PlanCatalogo[] }
 
 export interface CoberturaPlan { nombre: string; suma: number; prima: number }
-export interface PlanSis2000 { cplan: string; nombre: string; suma: number; prima: number; coberturas: CoberturaPlan[] }
+export interface PlanSis2000 { cramo: number; cplan: string; nombre: string; suma: number; prima: number; coberturas: CoberturaPlan[] }
 export interface PrimaTarifaPlan { cplan: string; prima: number; primaMinimaAplicada: boolean }
 export interface ResultadoEmision { cnpoliza: string; cnrecibo: string; urlpoliza: string }
 
@@ -40,8 +44,29 @@ function desenvolver(body: unknown, listo: (d: unknown) => boolean): unknown {
   return d;
 }
 
+/** Respuesta de valrep/planes/riesgos-generales agrupada por ramo, sin los planes excluidos. */
+export function parsearCatalogo(body: unknown): RamoCatalogo[] {
+  const error = errorDeRespuesta(body);
+  if (error) throw new Error(error);
+  const d = desenvolver(body, Array.isArray);
+  const ramos = new Map<number, RamoCatalogo>();
+  for (const f of (Array.isArray(d) ? d : []).filter(esObj)) {
+    const cramo = Number(f.cramo);
+    const cplan = String(f.cplan ?? '').trim();
+    if (!cramo || !cplan || PLANES_EXCLUIDOS[cramo]?.includes(cplan)) continue;
+    const ramo = ramos.get(cramo) ?? { cramo, xramo: String(f.xramo ?? '').trim() || `Ramo ${cramo}`, planes: [] };
+    ramo.planes.push({
+      cramo, xramo: ramo.xramo, cplan, xplan: String(f.xplan ?? '').trim() || cplan,
+      cproducto: f.cproducto ? String(f.cproducto).trim() : null, qcoberturas: Number(f.qcoberturas ?? 0),
+      msumamax: Number(f.msumamax ?? 0), mprima: Number(f.mprima ?? 0), cotizable: f.cotizable === true,
+    });
+    ramos.set(cramo, ramo);
+  }
+  return [...ramos.values()];
+}
+
 /** Respuesta de partner/starter/patrimonial/quote: una fila por cobertura del plan. */
-export function parsearCotizacionPlan(cplan: string, nombre: string, body: unknown): PlanSis2000 {
+export function parsearCotizacionPlan(cramo: number, cplan: string, nombre: string, body: unknown): PlanSis2000 {
   const error = errorDeRespuesta(body);
   if (error) throw new Error(error);
   const d = desenvolver(body, Array.isArray);
@@ -53,6 +78,7 @@ export function parsearCotizacionPlan(cplan: string, nombre: string, body: unkno
     prima: Number(f.mprimaext ?? 0),
   }));
   return {
+    cramo,
     cplan,
     nombre,
     // Mismo criterio que el trigger de emisión: suma = la mayor de las coberturas, prima = la suma de todas.
@@ -122,7 +148,7 @@ export function armarEmisionPlan(x: DatosEmisionPlan) {
     direccion: x.direccion.trim(),
   };
   return {
-    keys: { cnpoliza_rel: null, cplan: x.plan.cplan, cramo: RAMO_RCG },
+    keys: { cnpoliza_rel: null, cplan: x.plan.cplan, cramo: x.plan.cramo },
     tomador: {
       tipo_tomador: persona.tipo, rif_tomador: persona.rif, nombre_tomador: persona.nombre, apellido_tomador: persona.apellido,
       sexo_tomador: 'M', estado_civil_tomador: 'S', fnac_tomador: null, telefono_tomador: persona.telefono,

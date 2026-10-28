@@ -9,11 +9,42 @@ import { INDOLE_OTRA, tasaPromedio } from '../tarifas/rcg';
 import { useParametrosStore } from '../store/parametrosStore';
 import { actividadesDeClase, tasaMedia, type BaseNomina, type MonedaRc } from '../tarifas/rcp-rce';
 import { claseRc, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
+import { usePlanesStore } from '../store/planesStore';
+import { RAMO_RCG } from '../tarifas/planes-rcg';
 import { toast } from '../store/toastStore';
 
 export function RiesgoStep() {
   const producto = useCotizacionStore((s) => s.producto);
+  const ramoSel = useCotizacionStore((s) => s.ramoSel);
+  if (producto === 'planes' && ramoSel !== RAMO_RCG) return <RiesgoPlan />;
   return producto === 'rc' ? <RiesgoRc /> : <RiesgoRcg />;
+}
+
+/** Ramos de Sis2000 distintos del RCG: no hay tarifa por clase, solo la descripción del riesgo para la póliza. */
+function RiesgoPlan() {
+  const rcg = useCotizacionStore((s) => s.rcg);
+  const setRcg = useCotizacionStore((s) => s.setRcg);
+  const ramoSel = useCotizacionStore((s) => s.ramoSel);
+  const xramo = usePlanesStore((s) => s.ramos.find((r) => r.cramo === ramoSel)?.xramo);
+  const [intento, setIntento] = useState(false);
+  const error = intento && !rcg.actividadEspecifica.trim() ? 'Describe el bien o la actividad asegurada.' : undefined;
+
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Riesgo asegurado" description={xramo ? `Ramo ${xramo}` : undefined} Icon={Building2}>
+        <Field label="Bien o actividad asegurada" full error={error}
+          hint="Va en la descripción del bien de la póliza (p. ej. nombre y matrícula de la embarcación, o el inmueble).">
+          <Input value={rcg.actividadEspecifica} maxLength={250} onChange={(e) => setRcg({ actividadEspecifica: e.target.value })} placeholder="Ej. Lancha «La Gaviota», matrícula AGSP-1234" />
+        </Field>
+      </SectionCard>
+
+      <StepActions onContinue={() => {
+        setIntento(true);
+        if (!rcg.actividadEspecifica.trim()) { toast.error('Revisa el riesgo', 'Describe el bien o la actividad asegurada.'); return false; }
+        return true;
+      }} />
+    </div>
+  );
 }
 
 function RiesgoRcg() {

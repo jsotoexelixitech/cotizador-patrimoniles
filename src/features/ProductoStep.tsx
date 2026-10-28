@@ -1,8 +1,12 @@
-import { Building2, Check, FlaskConical, HardHat, Layers } from 'lucide-react';
+import { useEffect } from 'react';
+import { Building2, Check, FlaskConical, HardHat, Layers, Loader2, RefreshCw } from 'lucide-react';
+import { Aviso } from '../components/ui/Aviso';
+import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
 import { StepActions } from '../components/ui/StepActions';
 import { cn } from '../lib/utils';
 import { useCotizacionStore, type Producto } from '../store/cotizacionStore';
+import { usePlanesStore } from '../store/planesStore';
 import { toast } from '../store/toastStore';
 import type { Modo } from '../tarifas/rcp-rce';
 
@@ -16,8 +20,8 @@ const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; 
     desc: 'Responsabilidad del patrono frente a sus trabajadores (LOPCYMAT), calculada sobre la nómina anual.',
   },
   {
-    id: 'planes', nombre: 'Planes RCG Sis2000', detalle: 'Prueba · PLANI · PLANII · PLAN3', Icon: FlaskConical,
-    desc: 'Los planes de RC General configurados en Sis2000, con las reglas del RCG. Cotiza en línea y emite en QA.',
+    id: 'planes', nombre: 'Planes Sis2000', detalle: 'Prueba · Riesgos generales', Icon: FlaskConical,
+    desc: 'Los planes configurados en Sis2000 (naves, combinados, RC General…). Los planes nuevos aparecen solos. Cotiza en línea y emite en QA.',
   },
 ];
 
@@ -28,6 +32,13 @@ export function ProductoStep() {
   const setProducto = useCotizacionStore((s) => s.setProducto);
   const modo = useCotizacionStore((s) => s.rc.modo);
   const setRc = useCotizacionStore((s) => s.setRc);
+  const ramoSel = useCotizacionStore((s) => s.ramoSel);
+  const setRamoSel = useCotizacionStore((s) => s.setRamoSel);
+  const { ramos, cargandoRamos, errorRamos, cargarRamos } = usePlanesStore();
+
+  useEffect(() => {
+    if (producto === 'planes' && !ramos.length && !cargandoRamos && !errorRamos) void cargarRamos();
+  }, [producto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-5">
@@ -83,10 +94,44 @@ export function ProductoStep() {
             </div>
           </div>
         )}
+
+        {producto === 'planes' && (
+          <div className="mt-4">
+            <p className="text-[0.78rem] font-bold text-slate-600 tracking-wide mb-2">Ramo de Sis2000</p>
+            {cargandoRamos && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Consultando los planes de Sis2000…</p>}
+            {errorRamos && (
+              <div className="space-y-3">
+                <Aviso tono="error">{errorRamos}</Aviso>
+                <Button variant="secondary" size="sm" onClick={() => void cargarRamos()}><RefreshCw size={13} /> Reintentar</Button>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-2">
+              {ramos.map((r) => {
+                const cotizables = r.planes.filter((p) => p.cotizable).length;
+                return (
+                  <button
+                    key={r.cramo}
+                    type="button"
+                    disabled={!cotizables}
+                    title={cotizables ? undefined : 'Ningún plan de este ramo tiene tarifa en Sis2000.'}
+                    onClick={() => setRamoSel(r.cramo)}
+                    className={cn(
+                      'px-4 py-2 rounded-full text-sm font-bold border transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+                      ramoSel === r.cramo ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300',
+                    )}
+                  >
+                    {r.xramo} <span className="font-normal opacity-75">· {cotizables} {cotizables === 1 ? 'plan' : 'planes'}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </SectionCard>
 
       <StepActions onContinue={() => {
         if (!producto) { toast.warning('Selecciona un producto', 'Elige RC General, RC Patronal / Empresarial o los planes de Sis2000.'); return false; }
+        if (producto === 'planes' && !ramos.some((r) => r.cramo === ramoSel)) { toast.warning('Selecciona un ramo', 'Elige el ramo de Sis2000 que deseas cotizar.'); return false; }
         return true;
       }} />
     </div>

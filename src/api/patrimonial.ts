@@ -1,13 +1,14 @@
-// Partner patrimonial de nest-api (paquete @quand-mind/api_planes_v2), el mismo que usa Emisión.
-// Va por el proxy /nest de vite.config.ts, que agrega la key: nunca llega al navegador.
-import { RAMO_RCG, errorDeRespuesta, parsearEmision, type ResultadoEmision } from '../tarifas/planes-rcg';
+// Partner patrimonial de nest-api (paquete @quand-mind/api_planes_v2), el mismo que usa Emisión, y el
+// catálogo de planes de riesgos generales (valrep). Va por el proxy /nest de vite.config.ts, que agrega la
+// key: nunca llega al navegador.
+import { errorDeRespuesta, parsearCatalogo, parsearEmision, type RamoCatalogo, type ResultadoEmision } from '../tarifas/planes-rcg';
 
 const BASE = '/nest/api/v1/partner/starter/patrimonial';
 
-async function post(ruta: 'quote' | 'emit', body: unknown): Promise<unknown> {
+async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'catalogo'): Promise<unknown> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    res = await fetch(url, init);
   } catch {
     throw new Error('Sin conexión con nest-api.');
   }
@@ -18,12 +19,20 @@ async function post(ruta: 'quote' | 'emit', body: unknown): Promise<unknown> {
       ? 'Emisión bloqueada: NEST_API_URL no apunta a QA.'
       : 'Proxy sin configurar: define NEST_API_URL en .env.local y reinicia npm run dev.');
   }
+  if (res.status === 404 && ruta === 'catalogo') throw new Error('nest-api sin la ruta valrep/planes/riesgos-generales: falta desplegar la versión nueva.');
   if (res.status === 401 || res.status === 403) throw new Error('nest-api rechazó la key (NEST_API_KEY en .env.local o scope del partner patrimonial).');
   throw new Error(errorDeRespuesta({ status: false, ...(data as object) }) ?? `HTTP ${res.status}`);
 }
 
-/** spCalculoRiesgoGeneral: solo plan y frecuencia; suma y prima salen de maplantar. */
-export const cotizarPlan = (cplan: string) =>
-  post('quote', { cramo: RAMO_RCG, cplan, cuotas: 1, ifrecuencia: 'A', pdescuento: 0, precargo: 0 });
+const post = (ruta: 'quote' | 'emit', body: unknown) =>
+  pedir(`${BASE}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, ruta);
+
+/** Planes vigentes de riesgos generales en Sis2000, agrupados por ramo. */
+export const listarPlanes = async (): Promise<RamoCatalogo[]> =>
+  parsearCatalogo(await pedir('/nest/api/v1/valrep/planes/riesgos-generales', { method: 'GET' }, 'catalogo'));
+
+/** spCalculoRiesgoGeneral: solo ramo, plan y frecuencia; suma y prima salen de maplantar. */
+export const cotizarPlan = (cramo: number, cplan: string) =>
+  post('quote', { cramo, cplan, cuotas: 1, ifrecuencia: 'A', pdescuento: 0, precargo: 0 });
 
 export const emitirPlan = async (payload: unknown): Promise<ResultadoEmision> => parsearEmision(await post('emit', payload));

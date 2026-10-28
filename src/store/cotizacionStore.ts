@@ -7,7 +7,7 @@ import {
 } from '../tarifas/rcp-rce';
 import { useParametrosStore } from './parametrosStore';
 
-/** planes = PLANI/PLANII/PLAN3 de Sis2000 con las reglas del RCG (opción de prueba). */
+/** planes = planes de riesgos generales de Sis2000 (en el ramo 28, con las reglas del RCG). */
 export type Producto = 'rcg' | 'rc' | 'planes';
 export type K = 'p' | 'e';
 
@@ -31,7 +31,8 @@ export interface CotizacionState {
   };
   contrato: { esContrato: boolean; numero: string; objeto: string; coasegurado: string; vigencia: string };
   rcg: { moneda: MonedaRcg; clase: number; indole: string; actividadEspecifica: string; limite: string; tasa: string; condiciones: number[]; opcion: 'I' | 'II' | 'III' };
-  /** Plan Sis2000 elegido en la opción planes. */
+  /** Ramo y plan Sis2000 elegidos en la opción planes. */
+  ramoSel: number | null;
   planSel: string;
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
@@ -43,6 +44,7 @@ export interface CotizacionState {
   setRcg: (c: Partial<CotizacionState['rcg']>) => void;
   setRc: (c: Partial<CotizacionState['rc']>) => void;
   setRcProducto: (k: K, c: Partial<ProductoForm>) => void;
+  setRamoSel: (cramo: number) => void;
   setPlanSel: (cplan: string) => void;
   reset: () => void;
 }
@@ -59,6 +61,7 @@ const inicial = () => ({
   comun: { asegurado: '', tipoDoc: 'J', documento: '', correo: '', intermediario: '', ubicacion: '', sucursal: '', emisor: '', correoEmisor: '', apellido: '', telefono: '' },
   contrato: { esContrato: false, numero: '', objeto: '', coasegurado: '', vigencia: 'Anual' },
   rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: useParametrosStore.getState().rcg.clases[0] ? String(tasaPromedio(useParametrosStore.getState().rcg.clases[0])) : '', condiciones: [], opcion: 'I' as const },
+  ramoSel: null as number | null,
   planSel: '',
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
@@ -74,6 +77,7 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
   setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c } })),
   setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c } })),
   setRcProducto: (k, c) => set((s) => ({ rc: { ...s.rc, [k]: { ...s.rc[k], ...c } } })),
+  setRamoSel: (ramoSel) => set((s) => (s.ramoSel === ramoSel ? {} : { ramoSel, planSel: '' })),
   setPlanSel: (planSel) => set({ planSel }),
   reset: () => set(inicial()),
 }));

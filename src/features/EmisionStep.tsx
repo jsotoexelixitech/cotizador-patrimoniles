@@ -11,7 +11,7 @@ import { NOMBRES } from '../tarifas/rcp-rce';
 import { rifCompleto, useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
 import { useWizardStore } from '../store/wizardStore';
 import { usePlanesStore } from '../store/planesStore';
-import { armarEmisionPlan, primasTarifaRcg } from '../tarifas/planes-rcg';
+import { RAMO_RCG, armarEmisionPlan, primasTarifaRcg } from '../tarifas/planes-rcg';
 import { Aviso } from '../components/ui/Aviso';
 import { TablaCoberturas, TotalRc } from './CotizacionStep';
 import { esPersonaNatural } from './TomadorStep';
@@ -130,25 +130,28 @@ function ResumenPlan() {
   const rcg = useCotizacionStore((x) => x.rcg);
   const planSel = useCotizacionStore((x) => x.planSel);
   const planes = usePlanesStore((p) => p.planes);
+  const ramos = usePlanesStore((p) => p.ramos);
   const cot = useCotizacionPlanesRcg(planes[0]?.suma);
   const plan = planes.find((p) => p.cplan === planSel);
   if (!plan) return <Aviso tono="error">No hay plan elegido: vuelve al paso de cotización.</Aviso>;
-  const tarifa = primasTarifaRcg(planes, Number(rcg.tasa), prm).find((t) => t.cplan === plan.cplan);
+  const esRcg = plan.cramo === RAMO_RCG;
+  const tarifa = esRcg ? primasTarifaRcg(planes, Number(rcg.tasa), prm).find((t) => t.cplan === plan.cplan) : undefined;
+  const xramo = ramos.find((r) => r.cramo === plan.cramo)?.xramo ?? `Ramo ${plan.cramo}`;
   const usd = (n: number) => `USD ${importe(n)}`;
 
   return (
-    <SectionCard title={`${plan.nombre} · Sis2000`} description={`${rcg.indole} · ${rcg.actividadEspecifica} · tasa ${porcentaje(Number(rcg.tasa))}`} Icon={ShieldCheck}
-      statusLabel={plan.cplan}>
+    <SectionCard title={`${plan.nombre} · Sis2000`} Icon={ShieldCheck} statusLabel={plan.cplan}
+      description={esRcg ? `${rcg.indole} · ${rcg.actividadEspecifica} · tasa ${porcentaje(Number(rcg.tasa))}` : `${xramo} · ${rcg.actividadEspecifica}`}>
       <div className="grid sm:grid-cols-4 gap-4 mb-4">
         <Dato label="Suma asegurada">{usd(plan.suma)}</Dato>
         <Dato label="Prima Sis2000 (se emite)">{usd(plan.prima)}</Dato>
-        <Dato label="Prima tarifa RCG (referencia)">{tarifa ? usd(tarifa.prima) : '—'}</Dato>
+        {esRcg ? <Dato label="Prima tarifa RCG (referencia)">{tarifa ? usd(tarifa.prima) : '—'}</Dato> : <Dato label="Ramo">{xramo}</Dato>}
         <Dato label="Vigencia">Anual</Dato>
       </div>
       <ul className="text-[0.78rem] text-slate-600 grid sm:grid-cols-2 gap-x-6 gap-y-0.5 list-disc pl-5">
         {plan.coberturas.map((x) => <li key={x.nombre}>{x.nombre} · {importe(x.suma)}</li>)}
       </ul>
-      <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible:</strong> {cot.deducible}</p>
+      {esRcg && <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible:</strong> {cot.deducible}</p>}
     </SectionCard>
   );
 }
@@ -176,7 +179,7 @@ function EmitirPlan() {
       bien: [
         c.asegurado,
         c.ubicacion,
-        [clase?.etiqueta, rcg.indole].filter(Boolean).join(' · '),
+        plan.cramo === RAMO_RCG ? [clase?.etiqueta, rcg.indole].filter(Boolean).join(' · ') : '',
         [rcg.actividadEspecifica, k.esContrato ? `Contrato ${k.numero}: ${k.objeto} (coasegurado ${k.coasegurado})` : ''].filter(Boolean).join(' · '),
       ],
       pep, cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
