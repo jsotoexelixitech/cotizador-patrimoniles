@@ -22,8 +22,8 @@ export const MODULE_STEPS: ModuleStepConfig[] = [
     n: 1,
     label: 'Producto',
     eyebrow: 'Paso 01 · Producto',
-    title: 'Elige el ramo a cotizar',
-    description: 'Responsabilidad Civil General o Patronal / Empresarial.',
+    title: 'Elige qué cotizar',
+    description: 'Tarifa RCG, RCP / RCE o un plan de Sis2000.',
     Icon: Layers,
   },
   {

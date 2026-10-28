@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { SectionCard } from '../components/ui/SectionCard';
 import { StepActions } from '../components/ui/StepActions';
 import { cn } from '../lib/utils';
+import { importe } from '../tarifas/comun';
 import { useCotizacionStore, type Producto } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
 import { toast } from '../store/toastStore';
@@ -34,11 +35,15 @@ export function ProductoStep() {
   const setRc = useCotizacionStore((s) => s.setRc);
   const ramoSel = useCotizacionStore((s) => s.ramoSel);
   const setRamoSel = useCotizacionStore((s) => s.setRamoSel);
+  const planSel = useCotizacionStore((s) => s.planSel);
+  const setPlanSel = useCotizacionStore((s) => s.setPlanSel);
   const { ramos, cargandoRamos, errorRamos, cargarRamos } = usePlanesStore();
 
   useEffect(() => {
     if (producto === 'planes' && !ramos.length && !cargandoRamos && !errorRamos) void cargarRamos();
   }, [producto]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ramo = ramos.find((r) => r.cramo === ramoSel);
 
   return (
     <div className="space-y-5">
@@ -125,13 +130,46 @@ export function ProductoStep() {
                 );
               })}
             </div>
+
+            {ramo && (
+              <div className="mt-4">
+                <p className="text-[0.78rem] font-bold text-slate-600 tracking-wide mb-2">Plan · {ramo.xramo}</p>
+                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {ramo.planes.filter((p) => p.cotizable).map((p) => {
+                    const activo = planSel === p.cplan;
+                    return (
+                      <button
+                        key={p.cplan}
+                        type="button"
+                        onClick={() => setPlanSel(p.cplan)}
+                        className={cn(
+                          'text-left rounded-2xl border p-4 transition-all',
+                          activo ? 'border-indigo-400 bg-indigo-50/60 ring-2 ring-indigo-200' : 'border-slate-200 bg-white hover:border-indigo-200',
+                        )}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-display font-bold text-slate-900 text-sm">{p.xplan}</p>
+                          {activo && <span className="w-5 h-5 shrink-0 rounded-full bg-indigo-600 text-white grid place-items-center"><Check size={11} strokeWidth={3} /></span>}
+                        </div>
+                        <p className="font-display text-xl font-black gradient-text-indigo tabular-nums mt-1">USD {importe(p.mprima)}</p>
+                        <p className="text-[0.75rem] text-slate-500 mt-1">
+                          Suma {importe(p.msumamax)} · {p.qcoberturas} {p.qcoberturas === 1 ? 'cobertura' : 'coberturas'} · {p.cplan}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[0.72rem] text-slate-500 mt-2">Prima anual de referencia de Sis2000; se confirma en línea en el paso de cotización.</p>
+              </div>
+            )}
           </div>
         )}
       </SectionCard>
 
       <StepActions onContinue={() => {
         if (!producto) { toast.warning('Selecciona un producto', 'Elige RC General, RC Patronal / Empresarial o los planes de Sis2000.'); return false; }
-        if (producto === 'planes' && !ramos.some((r) => r.cramo === ramoSel)) { toast.warning('Selecciona un ramo', 'Elige el ramo de Sis2000 que deseas cotizar.'); return false; }
+        if (producto === 'planes' && !ramo) { toast.warning('Selecciona un ramo', 'Elige el ramo de Sis2000 que deseas cotizar.'); return false; }
+        if (producto === 'planes' && !ramo?.planes.some((p) => p.cplan === planSel)) { toast.warning('Selecciona un plan', 'Elige el plan de Sis2000 que deseas cotizar.'); return false; }
         return true;
       }} />
     </div>
