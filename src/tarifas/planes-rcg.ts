@@ -8,6 +8,9 @@ import { PARAMETROS_RCG, type ParametrosRcg } from './rcg';
 
 export const RAMO_RCG = 28;
 
+/** La Mundial no cotiza Naves (20) ni Riesgos Especiales (25) por este canal (28-oct-2026). */
+export const RAMOS_EXCLUIDOS = [20, 25];
+
 /** BINAC* son de RCV binacional (su propio flujo); IGEMA es exclusivo del productor 1051 en mausuplan. */
 export const PLANES_EXCLUIDOS: Record<number, string[]> = { 28: ['BINAC', 'BINACA', 'BINACB', 'IGEMA'] };
 
@@ -53,7 +56,7 @@ export function parsearCatalogo(body: unknown): RamoCatalogo[] {
   for (const f of (Array.isArray(d) ? d : []).filter(esObj)) {
     const cramo = Number(f.cramo);
     const cplan = String(f.cplan ?? '').trim();
-    if (!cramo || !cplan || PLANES_EXCLUIDOS[cramo]?.includes(cplan)) continue;
+    if (!cramo || !cplan || RAMOS_EXCLUIDOS.includes(cramo) || PLANES_EXCLUIDOS[cramo]?.includes(cplan)) continue;
     const ramo = ramos.get(cramo) ?? { cramo, xramo: String(f.xramo ?? '').trim() || `Ramo ${cramo}`, planes: [] };
     ramo.planes.push({
       cramo, xramo: ramo.xramo, cplan, xplan: String(f.xplan ?? '').trim() || cplan,

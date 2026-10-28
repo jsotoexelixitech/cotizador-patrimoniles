@@ -40,14 +40,14 @@ describe('Planes RCG Sis2000', () => {
     expect([p.fdesde, p.fhasta, p.suma_asegurada, p.prima, p.ptasamon]).toEqual(['2026-10-27', '2027-10-27', 50000, 9.74, null]);
   });
 
-  it('catálogo de nest-api agrupado por ramo y sin planes excluidos', () => {
+  it('catálogo de nest-api agrupado por ramo, sin ramos ni planes excluidos', () => {
     const fila = (cramo: number, xramo: string, cplan: string, cotizable = true) =>
       ({ cramo, xramo, ctiporamo: 6, cplan, xplan: `Plan ${cplan}`, cproducto: null, qcoberturas: 1, msumamax: 1000, mprima: 10, cotizable });
     const ramos = parsearCatalogo({ status: true, data: [
-      fila(20, 'NAVES', 'RCE1'), fila(20, 'NAVES', 'RCE2'), fila(28, 'RESPONSABILIDAD CIVIL GENERAL', 'PLANI'),
+      fila(16, 'COMBINADOS EMPRESARIAL', '1'), fila(16, 'COMBINADOS EMPRESARIAL', '2'), fila(20, 'NAVES', 'RCE1'), fila(25, 'RIESGOS ESPECIALES', 'CORP1'), fila(28, 'RESPONSABILIDAD CIVIL GENERAL', 'PLANI'),
       fila(28, 'RESPONSABILIDAD CIVIL GENERAL', 'BINAC'), fila(28, 'RESPONSABILIDAD CIVIL GENERAL', 'IGEMA'), fila(10, 'INCENDIO', 'PAST12', false),
     ] });
-    expect(ramos.map((r) => [r.cramo, r.planes.map((p) => p.cplan)])).toEqual([[20, ['RCE1', 'RCE2']], [28, ['PLANI']], [10, ['PAST12']]]);
+    expect(ramos.map((r) => [r.cramo, r.planes.map((p) => p.cplan)])).toEqual([[16, ['1', '2']], [28, ['PLANI']], [10, ['PAST12']]]);
     expect(ramos[2].planes[0].cotizable).toBe(false);
   });
 

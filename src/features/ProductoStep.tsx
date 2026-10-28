@@ -22,7 +22,7 @@ const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; 
   },
   {
     id: 'planes', nombre: 'Planes Sis2000', detalle: 'Planes con precio fijo · todos los ramos', Icon: FlaskConical,
-    desc: 'Los planes que La Mundial tiene cargados en Sis2000 (naves, combinados, RC General…), con su suma y prima. Los nuevos aparecen solos. Emite en QA.',
+    desc: 'Los planes que La Mundial tiene cargados en Sis2000 (combinados, RC General…), con su suma y prima. Los nuevos aparecen solos. Emite en QA.',
   },
 ];
 
