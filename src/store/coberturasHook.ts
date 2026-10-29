@@ -6,7 +6,7 @@ import { usePlanesStore } from './planesStore';
 /** El ramo elegido se cotiza por coberturas (16 y 38) en lugar del plan cerrado. */
 export const esRamoCoberturas = (cramo: number | null | undefined) => cramo != null && RAMOS_COBERTURAS.includes(cramo);
 
-/** Cotización por coberturas del plan elegido; null mientras no haya tarificador cargado para ese plan. */
+/** Cotización por coberturas del plan elegido; null mientras no haya tarifa cargada para ese plan. */
 export function useCotizacionCoberturas() {
   const ramoSel = useCotizacionStore((s) => s.ramoSel);
   const planSel = useCotizacionStore((s) => s.planSel);
@@ -15,8 +15,8 @@ export function useCotizacionCoberturas() {
   return useMemo(() => {
     if (!esRamoCoberturas(ramoSel) || !tarifa?.plan || tarifa.cramo !== ramoSel || tarifa.cplan !== planSel) return null;
     const plan = tarifa.plan;
-    const suma = coberturas.sumaBasica === '' ? plan.suma : Number(coberturas.sumaBasica);
-    const elegidas = coberturas.elegidas ?? plan.coberturas.map((c) => c.ccober);
-    return { plan, elegidas, suma, cot: cotizarCoberturas(plan, tarifa.tasas, Number.isFinite(suma) ? suma : 0, elegidas) };
+    const cot = cotizarCoberturas(plan, coberturas.elegidas, coberturas.sumas);
+    const valida = !Object.keys(cot.errores).length && !cot.generales.length;
+    return { plan, elegidas: coberturas.elegidas, sumas: coberturas.sumas, cot, valida };
   }, [ramoSel, planSel, coberturas, tarifa]);
 }

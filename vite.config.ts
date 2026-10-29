@@ -17,7 +17,7 @@ export default defineConfig(({ mode }) => {
           rewrite: (p) => p.replace(/^\/nest/, ''),
           headers: env.NEST_API_KEY ? { apikey: env.NEST_API_KEY } : {},
           // Emitir solo contra QA/dev: con cualquier otro destino la ruta de emisión responde 404.
-          bypass: (req) => (!esQa && /\/patrimonial\/emit|\/condominio\/emision/.test(req.url ?? '') ? false : undefined),
+          bypass: (req) => (!esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(req.url ?? '') ? false : undefined),
         },
       }
     : undefined;

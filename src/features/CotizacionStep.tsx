@@ -14,7 +14,7 @@ import { useParametrosStore } from '../store/parametrosStore';
 import { useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, type K } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
 import { RAMO_RCG, primasTarifaRcg } from '../tarifas/planes-rcg';
-import { COBERTURA_BASICA } from '../tarifas/coberturas';
+import { sumaDe } from '../tarifas/coberturas';
 import { esRamoCoberturas, useCotizacionCoberturas } from '../store/coberturasHook';
 import { toast } from '../store/toastStore';
 
@@ -256,8 +256,11 @@ function CotizacionPlanes() {
         if (!elegido) { toast.warning('Elige un plan', planes.length ? 'Selecciona uno de los planes cotizados.' : 'No hay planes cotizados de Sis2000.'); return false; }
         if (porCoberturas) {
           if (!cobCot) { toast.warning('Cargando coberturas', 'Espera el tarificador del plan.'); return false; }
-          if (!(cobCot.suma > 0)) { toast.error('Revisa la suma', 'Indica la suma asegurada de la cobertura básica.'); return false; }
-          if (cobCot.cot.sinTasa.length) { toast.error('Coberturas sin tasa', cobCot.cot.sinTasa.join(', ')); return false; }
+          if (!cobCot.valida) {
+            const e = cobCot.cot.generales[0] ?? Object.entries(cobCot.cot.errores).map(([k, v]) => `${cobCot.plan.coberturas.find((c) => c.ccober === k)?.nombre ?? k}: ${v}`)[0];
+            toast.error('Revisa las coberturas', e);
+            return false;
+          }
         }
         return true;
       }} />
@@ -265,74 +268,80 @@ function CotizacionPlanes() {
   );
 }
 
-/** Ramos 16 y 38: coberturas del plan con casillas; suma = proporción de la básica y prima = suma × tasa. */
+/** Ramos 16 y 38: coberturas del plan con casilla y suma editable; prima = suma × tasa de Sis2000 (matarifa_d). */
 function CoberturasElegibles() {
   const setCoberturas = useCotizacionStore((s) => s.setCoberturas);
-  const sumaBasica = useCotizacionStore((s) => s.coberturas.sumaBasica);
   const { cargandoTarifa, errorTarifa, tarifa } = usePlanesStore();
   const cargarTarifa = usePlanesStore((p) => p.cargarTarifa);
   const r = useCotizacionCoberturas();
   const usd = (n: number) => `USD ${importe(n)}`;
 
-  if (cargandoTarifa) return <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Cargando el tarificador de coberturas…</p>;
+  if (cargandoTarifa) return <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Cargando la tarifa por cobertura…</p>;
   if (errorTarifa || !r) {
     return (
       <div className="space-y-3">
-        <Aviso tono="error">{errorTarifa ?? 'Sin tarificador para este plan.'}</Aviso>
+        <Aviso tono="error">{errorTarifa ?? 'Sin tarifa por cobertura para este plan.'}</Aviso>
         {tarifa && <Button variant="secondary" size="sm" onClick={() => void cargarTarifa(tarifa.cramo, tarifa.cplan)}><RefreshCw size={13} /> Reintentar</Button>}
       </div>
     );
   }
-  const { plan, elegidas, cot } = r;
+  const { plan, cot, sumas } = r;
+  const elegidas = r.elegidas ?? plan.coberturas.map((c) => c.ccober);
   const porCob = new Map(cot.coberturas.map((c) => [c.ccober, c]));
-  const factor = plan.suma > 0 ? r.suma / plan.suma : 0;
   const alternar = (ccober: string, v: boolean) =>
     setCoberturas({ elegidas: v ? [...elegidas, ccober] : elegidas.filter((x) => x !== ccober) });
+  const tope = (min: number, max: number) =>
+    min > 0 || max > 0 ? [min > 0 && `mín. ${importe(min)}`, max > 0 && `máx. ${importe(max)}`].filter(Boolean).join(' · ') : '';
 
   return (
-    <SectionCard title="Arma la cobertura" description="Marca las coberturas a incluir. La prima de cada una es su suma × la tasa de Sis2000 (matarifa_d)." Icon={ListChecks}>
-      <div className="grid sm:grid-cols-3 gap-4 mb-4">
-        <Field label="Suma asegurada (cobertura básica)" hint={`Plan: ${usd(plan.suma)}. Las demás coberturas mantienen su proporción.`}>
-          <Input type="number" min={0} step="0.01" value={sumaBasica === '' ? String(plan.suma) : sumaBasica} onChange={(e) => setCoberturas({ sumaBasica: e.target.value })} />
-        </Field>
-      </div>
+    <SectionCard title="Arma la cobertura" description="Marca las coberturas y ajusta su suma. La prima de cada una es su suma × la tasa de Sis2000." Icon={ListChecks}>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-[0.78rem]">
           <thead className="bg-slate-50 text-slate-600">
             <tr>
               <th className="text-left font-bold px-3 py-2">Cobertura</th>
-              <th className="text-right font-bold px-3 py-2">Suma</th>
+              <th className="text-right font-bold px-3 py-2">Suma asegurada</th>
               <th className="text-right font-bold px-3 py-2">Tasa</th>
               <th className="text-right font-bold px-3 py-2">Prima</th>
             </tr>
           </thead>
           <tbody>
             {plan.coberturas.map((c) => {
-              const basica = c.ccober === COBERTURA_BASICA;
-              const marcada = basica || elegidas.includes(c.ccober);
+              const marcada = c.obligatoria || elegidas.includes(c.ccober);
               const x = porCob.get(c.ccober);
+              const err = marcada ? cot.errores[c.ccober] : undefined;
+              const limites = tope(c.msumamin, c.msumamax);
               return (
-                <tr key={c.ccober} className={cn('border-t border-slate-100', !marcada && 'text-slate-400')}>
-                  <td className="px-3 py-1.5">
+                <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400')}>
+                  <td className="px-3 py-2">
                     <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={basica} onChange={(e) => alternar(c.ccober, e.target.checked)} />
-                      <span className={marcada ? 'text-slate-700' : ''}>{c.nombre}{basica ? ' · obligatoria' : ''}</span>
+                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={c.obligatoria} onChange={(e) => alternar(c.ccober, e.target.checked)} />
+                      <span className={marcada ? 'text-slate-700' : ''}>{c.nombre}{c.obligatoria ? ' · obligatoria' : ''}</span>
                     </label>
                   </td>
-                  <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(x?.suma_asegurada ?? (basica ? r.suma : c.msumamax * factor))}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{x ? porcentaje(x.tasa) : '—'}</td>
-                  <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{x ? importe(x.prima) : '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number" min={0} step="0.01" disabled={!marcada}
+                      value={sumas[c.ccober] ?? String(c.msumaplan)}
+                      onChange={(e) => setCoberturas({ sumas: { ...sumas, [c.ccober]: e.target.value } })}
+                      className={cn('w-32 rounded-lg border px-2 py-1 text-right tabular-nums disabled:bg-slate-50', err ? 'border-red-400' : 'border-slate-200')}
+                    />
+                    {(err || limites) && <p className={cn('text-[0.68rem] mt-0.5', err ? 'text-red-600' : 'text-slate-400')}>{err ?? limites}</p>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{porcentaje(c.pprima)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      {cot.sinTasa.length > 0 && <Aviso tono="error">Sin tasa vigente en Sis2000: {cot.sinTasa.join(', ')}.</Aviso>}
       <div className="mt-4">
         <TotalRc total={usd(cot.prima_total)} detalle={`${cot.coberturas.length} coberturas · suma asegurada ${usd(cot.suma_asegurada)}`} />
       </div>
-      <p className="text-[0.72rem] text-slate-500 mt-2">Se emite cobertura por cobertura con estos valores: Sis2000 los valida contra sus tasas antes de emitir.</p>
+      <p className="text-[0.72rem] text-slate-500 mt-2">
+        Sumas por defecto: las del plan ({importe(sumaDe(plan.coberturas[0], {}))} la básica). nest-api recalcula la prima con las tasas de Sis2000 antes de emitir.
+      </p>
     </SectionCard>
   );
 }

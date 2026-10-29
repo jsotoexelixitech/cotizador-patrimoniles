@@ -34,8 +34,8 @@ export interface CotizacionState {
   /** Ramo y plan Sis2000 elegidos en la opción planes. */
   ramoSel: number | null;
   planSel: string;
-  /** Ramos 16 y 38: suma de la cobertura básica y coberturas elegidas (ccober; null = todas las del plan). */
-  coberturas: { sumaBasica: string; elegidas: string[] | null };
+  /** Ramos 16 y 38: suma escrita por cobertura (ccober → monto) y coberturas elegidas (null = todas las del plan). */
+  coberturas: { sumas: Record<string, string>; elegidas: string[] | null };
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
     claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
@@ -66,7 +66,7 @@ const inicial = () => ({
   rcg: { moneda: 'USD' as MonedaRcg, clase: 0, indole: '', actividadEspecifica: '', limite: '', tasa: useParametrosStore.getState().rcg.clases[0] ? String(tasaPromedio(useParametrosStore.getState().rcg.clases[0])) : '', condiciones: [], opcion: 'I' as const },
   ramoSel: null as number | null,
   planSel: '',
-  coberturas: { sumaBasica: '', elegidas: null as string[] | null },
+  coberturas: { sumas: {} as Record<string, string>, elegidas: null as string[] | null },
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
     claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
@@ -81,8 +81,8 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
   setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c } })),
   setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c } })),
   setRcProducto: (k, c) => set((s) => ({ rc: { ...s.rc, [k]: { ...s.rc[k], ...c } } })),
-  setRamoSel: (ramoSel) => set((s) => (s.ramoSel === ramoSel ? {} : { ramoSel, planSel: '', coberturas: { sumaBasica: '', elegidas: null } })),
-  setPlanSel: (planSel) => set((s) => (s.planSel === planSel ? {} : { planSel, coberturas: { sumaBasica: '', elegidas: null } })),
+  setRamoSel: (ramoSel) => set((s) => (s.ramoSel === ramoSel ? {} : { ramoSel, planSel: '', coberturas: { sumas: {}, elegidas: null } })),
+  setPlanSel: (planSel) => set((s) => (s.planSel === planSel ? {} : { planSel, coberturas: { sumas: {}, elegidas: null } })),
   setCoberturas: (c) => set((s) => ({ coberturas: { ...s.coberturas, ...c } })),
   reset: () => set(inicial()),
 }));

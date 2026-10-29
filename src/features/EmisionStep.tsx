@@ -85,7 +85,7 @@ export function EmisionStep() {
           ? { opcion: 'I', limite: cobCot.cot.suma_asegurada, prima: cobCot.cot.prima_total, primaMinimaAplicada: false }
           : { opcion: 'I', limite: plan.suma, prima: plan.prima, primaMinimaAplicada: false }],
         coberturas: cobCot
-          ? cobCot.cot.coberturas.map((x) => ({ nombre: `${x.nombre} (prima ${importe(x.prima)})`, montos: [x.suma_asegurada] }))
+          ? cobCot.cot.coberturas.map((x) => ({ nombre: `${x.nombre} (prima ${importe(x.prima)})`, montos: [x.suma] }))
           : plan.coberturas.map((x) => ({ nombre: x.nombre, montos: [x.suma] })),
         deducible: esRcg ? cotPlanes.deducible : '', notaIgtf: true, condiciones: esRcg ? cotPlanes.condiciones : [], vigenciaDias,
         plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg },
@@ -189,7 +189,7 @@ function ResumenPlan() {
       </div>
       <ul className="text-[0.78rem] text-slate-600 grid sm:grid-cols-2 gap-x-6 gap-y-0.5 list-disc pl-5">
         {cobCot
-          ? cobCot.cot.coberturas.map((x) => <li key={x.ccober}>{x.nombre} · {importe(x.suma_asegurada)} · prima {importe(x.prima)}</li>)
+          ? cobCot.cot.coberturas.map((x) => <li key={x.ccober}>{x.nombre} · {importe(x.suma)} · prima {importe(x.prima)}</li>)
           : plan.coberturas.map((x) => <li key={x.nombre}>{x.nombre} · {importe(x.suma)}</li>)}
       </ul>
       {esRcg && <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible:</strong> {cot.deducible}</p>}
@@ -217,11 +217,12 @@ function EmitirPlan() {
     if (!window.confirm(aviso)) return;
     const cproductor = Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080;
     if (cobCot) {
+      if (!cobCot.valida) { toast.error("Revisa las coberturas", "Vuelve al paso de cotización: hay sumas fuera de rango o sin tasa."); return; }
       const r = await emitir(armarEmisionCoberturas({
         cramo: plan.cramo, cplan: plan.cplan, cot: cobCot.cot, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
         apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
         bien: rcg.actividadEspecifica, apartamento: Number(c.apartamento) || undefined, cproductor,
-      }), 'condominio');
+      }), 'coberturas');
       if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
       return;
     }
@@ -258,7 +259,7 @@ function EmitirPlan() {
   }
 
   return (
-    <SectionCard title="Emitir en Sis2000 QA" description={cobCot ? 'Cobertura por cobertura (nest-api condominio/emision).' : 'Partner patrimonial de nest-api (el mismo de Emisión).'} Icon={habilitada ? FileCheck2 : Lock}
+    <SectionCard title="Emitir en Sis2000 QA" description={cobCot ? 'Cobertura por cobertura (nest-api riesgos-generales/emision).' : 'Partner patrimonial de nest-api (el mismo de Emisión).'} Icon={habilitada ? FileCheck2 : Lock}
       statusLabel={habilitada ? 'Solo QA' : 'Deshabilitada'} statusTone="warning">
       <div className="space-y-3">
         <label className="flex items-start gap-2 text-sm text-slate-700">
