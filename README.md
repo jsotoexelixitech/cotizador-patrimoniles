@@ -21,8 +21,24 @@ npm run build    # dist/ ; VITE_APP_BASE=/cotizador-rc/ para servirlo bajo subpa
 
 - Límite inicial 5.000 – 1.000.000. Opciones I/II/III = ×1/×2/×3 con tope 1.000.000 (se descarta la que no supere a la anterior).
 - Prima = máx(límite × tasa / 100, mínimo). Mínimo USD/EUR = 70 × (suma de la opción / límite inicial); Bs = 35 % de la suma.
-- Tasa dentro del rango de la clase. Índoles de industria exigen «Toda clase de Industrias». Actividades restringidas → Área Técnica.
+- Tasa dentro del rango de la clase. Índoles de industria exigen «Toda clase de Industrias».
+- Actividades restringidas (petróleo, minería, astilleros…): no bloquean (acuerdo del 30-oct-2026). Aviso «Actividad sujeta a
+  evaluación de la mesa técnica» y el resumen y el PDF dicen «Sujeto a aprobación de la mesa técnica». Aplica también a los
+  planes Sis2000 y al combo (por la descripción de la actividad).
 - Sublímite 30 % con tope en Agua (300.000), Contaminación (100.000), Avisos (30.000) y Defensa Penal (20.000).
+
+## Combo de coberturas
+
+- Todas las coberturas con tarifa vigente de un ramo: `GET /nest/api/v1/riesgos-generales/coberturas?cramo=N` (ruta propia
+  del cotizador en nest-api; si responde 404, el ambiente aún no la tiene). Motor puro en `src/tarifas/combo.ts`.
+- Obligatorias siempre incluidas; adicionales a elección. Cada una con su suma dentro de mín./máx. (0 = sin tope) y ninguna
+  adicional por encima de la básica ('1'). Prima = suma × tasa / 100, o la prima fija si no hay tasa; total = suma de primas.
+- Solo cotiza: para emitirlo, el combo debe existir como plan en Sis2000 (Product Builder → Combos de coberturas).
+
+## Vista técnica
+
+Interruptor en **Parámetros** (apagado por defecto, se guarda en el navegador). Apagado, el cliente solo ve la prima total:
+se ocultan la tasa y la prima de cada cobertura en pantalla, en el resumen (también el desglose RCP/RCE que se imprime) y en el PDF.
 
 ## Reglas RCP / RCE
 

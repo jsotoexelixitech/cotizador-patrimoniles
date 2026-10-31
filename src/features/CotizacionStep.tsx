@@ -11,18 +11,28 @@ import { importe, porcentaje } from '../tarifas/comun';
 import { MONEDAS_RCG, type MonedaRcg } from '../tarifas/rcg';
 import { COBERTURAS_BASICAS, NOMBRES, opcionalesDe, type IdOpcion, type ParametrosRc } from '../tarifas/rcp-rce';
 import { useParametrosStore } from '../store/parametrosStore';
-import { useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, type K } from '../store/cotizacionStore';
+import { useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, useMesaTecnica, type K } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
 import { RAMO_RCG, primasTarifaRcg } from '../tarifas/planes-rcg';
 import { sumaDe } from '../tarifas/coberturas';
 import { esRamoCoberturas, useCotizacionCoberturas } from '../store/coberturasHook';
+import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
 import { toast } from '../store/toastStore';
+import { AvisoMesaTecnica } from './RiesgoStep';
 
 export function CotizacionStep() {
   const producto = useCotizacionStore((s) => s.producto);
-  if (producto === 'planes') return <CotizacionPlanes />;
-  return producto === 'rc' ? <CotizacionRc /> : <CotizacionRcg />;
+  const mesaTecnica = useMesaTecnica();
+  const vista = producto === 'planes' ? <CotizacionPlanes />
+    : producto === 'combo' ? <CotizacionCombo />
+    : producto === 'rc' ? <CotizacionRc /> : <CotizacionRcg />;
+  // Actividad restringida: se sigue cotizando, con el mismo aviso del paso de riesgo.
+  return <div className="space-y-5">{mesaTecnica && <AvisoMesaTecnica />}{vista}</div>;
 }
+
+/** Topes de suma de una cobertura para mostrar bajo el campo; 0 = sin tope. */
+const topes = (min: number, max: number) =>
+  min > 0 || max > 0 ? [min > 0 && `mín. ${importe(min)}`, max > 0 && `máx. ${importe(max)}`].filter(Boolean).join(' · ') : '';
 
 /** Tarjeta de opción seleccionable, mismo patrón que las tarjetas de plan de RCV. */
 function TarjetaOpcion({ titulo, activa, onClick, prima, children, etiqueta }: {
@@ -165,6 +175,7 @@ function CotizacionPlanes() {
   const porCoberturas = esRamoCoberturas(ramoSel);
   const cargarTarifa = usePlanesStore((p) => p.cargarTarifa);
   const cobCot = useCotizacionCoberturas();
+  const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
 
   useEffect(() => {
     if (ramoSel != null && ramoCotizado !== ramoSel && !cargando) void cargar(ramoSel);
@@ -230,18 +241,21 @@ function CotizacionPlanes() {
       )}
 
       {elegido && !porCoberturas && (
-        <SectionCard title={`Coberturas de ${elegido.nombre}`} description="Suma y prima por cobertura en Sis2000 (maplantar)." Icon={ListChecks}>
+        <SectionCard title={`Coberturas de ${elegido.nombre}`} description={`${vistaTecnica ? 'Suma y prima' : 'Suma'} por cobertura en Sis2000 (maplantar).`} Icon={ListChecks}>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full text-[0.78rem]">
               <thead className="bg-slate-50 text-slate-600">
-                <tr><th className="text-left font-bold px-3 py-2">Cobertura</th><th className="text-right font-bold px-3 py-2">Suma</th><th className="text-right font-bold px-3 py-2">Prima</th></tr>
+                <tr>
+                  <th className="text-left font-bold px-3 py-2">Cobertura</th><th className="text-right font-bold px-3 py-2">Suma</th>
+                  {vistaTecnica && <th className="text-right font-bold px-3 py-2">Prima</th>}
+                </tr>
               </thead>
               <tbody>
                 {elegido.coberturas.map((c) => (
                   <tr key={c.nombre} className="border-t border-slate-100">
                     <td className="px-3 py-1.5 text-slate-700">{c.nombre}</td>
                     <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(c.suma)}</td>
-                    <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(c.prima)}</td>
+                    {vistaTecnica && <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(c.prima)}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -274,6 +288,7 @@ function CoberturasElegibles() {
   const { cargandoTarifa, errorTarifa, tarifa } = usePlanesStore();
   const cargarTarifa = usePlanesStore((p) => p.cargarTarifa);
   const r = useCotizacionCoberturas();
+  const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
   const usd = (n: number) => `USD ${importe(n)}`;
 
   if (cargandoTarifa) return <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Cargando la tarifa por cobertura…</p>;
@@ -290,8 +305,6 @@ function CoberturasElegibles() {
   const porCob = new Map(cot.coberturas.map((c) => [c.ccober, c]));
   const alternar = (ccober: string, v: boolean) =>
     setCoberturas({ elegidas: v ? [...elegidas, ccober] : elegidas.filter((x) => x !== ccober) });
-  const tope = (min: number, max: number) =>
-    min > 0 || max > 0 ? [min > 0 && `mín. ${importe(min)}`, max > 0 && `máx. ${importe(max)}`].filter(Boolean).join(' · ') : '';
 
   return (
     <SectionCard title="Arma la cobertura" description="Marca las coberturas y ajusta su suma. La prima de cada una es su suma × la tasa de Sis2000." Icon={ListChecks}>
@@ -301,8 +314,8 @@ function CoberturasElegibles() {
             <tr>
               <th className="text-left font-bold px-3 py-2">Cobertura</th>
               <th className="text-right font-bold px-3 py-2">Suma asegurada</th>
-              <th className="text-right font-bold px-3 py-2">Tasa</th>
-              <th className="text-right font-bold px-3 py-2">Prima</th>
+              {vistaTecnica && <th className="text-right font-bold px-3 py-2">Tasa</th>}
+              {vistaTecnica && <th className="text-right font-bold px-3 py-2">Prima</th>}
             </tr>
           </thead>
           <tbody>
@@ -310,7 +323,7 @@ function CoberturasElegibles() {
               const marcada = c.obligatoria || elegidas.includes(c.ccober);
               const x = porCob.get(c.ccober);
               const err = marcada ? cot.errores[c.ccober] : undefined;
-              const limites = tope(c.msumamin, c.msumamax);
+              const limites = topes(c.msumamin, c.msumamax);
               return (
                 <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400')}>
                   <td className="px-3 py-2">
@@ -328,8 +341,8 @@ function CoberturasElegibles() {
                     />
                     {(err || limites) && <p className={cn('text-[0.68rem] mt-0.5', err ? 'text-red-600' : 'text-slate-400')}>{err ?? limites}</p>}
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{porcentaje(c.pprima)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>
+                  {vistaTecnica && <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{porcentaje(c.pprima)}</td>}
+                  {vistaTecnica && <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>}
                 </tr>
               );
             })}
@@ -341,6 +354,114 @@ function CoberturasElegibles() {
       </div>
       <p className="text-[0.72rem] text-slate-500 mt-2">
         Sumas por defecto: las del plan ({importe(sumaDe(plan.coberturas[0], {}))} la básica). nest-api recalcula la prima con las tasas de Sis2000 antes de emitir.
+      </p>
+    </SectionCard>
+  );
+}
+
+/** Combo del ramo elegido en el paso 1 (riesgos-generales/coberturas). Solo cotiza: no hay ruta de emisión. */
+function CotizacionCombo() {
+  const cramo = useCotizacionStore((s) => s.ramoCombo);
+  const error = usePlanesStore((s) => (cramo == null ? null : s.catalogos[cramo]?.error ?? null));
+  const cargarCatalogo = usePlanesStore((s) => s.cargarCatalogo);
+  const xramo = useNombreRamo(cramo);
+  const r = useCotizacionCombo();
+  const [intento, setIntento] = useState(false);
+
+  useEffect(() => {
+    if (cramo != null) void cargarCatalogo(cramo);
+  }, [cramo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="space-y-5">
+      {cramo == null ? <Aviso tono="error">No hay ramo elegido: vuelve al paso de producto.</Aviso>
+        : r ? <TablaCombo r={r} intento={intento} />
+        : error ? (
+          <div className="space-y-3">
+            <Aviso tono="error">{error}</Aviso>
+            <Button variant="secondary" size="sm" onClick={() => void cargarCatalogo(cramo)}><RefreshCw size={13} /> Reintentar</Button>
+          </div>
+        ) : <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Consultando las coberturas de {xramo}…</p>}
+
+      <StepActions continueLabel="Ver resumen" onContinue={() => {
+        setIntento(true);
+        if (!r) { toast.warning('Sin coberturas cargadas', 'Espera la consulta del ramo o vuelve al paso de producto.'); return false; }
+        if (!r.valida) {
+          const e = r.cot.generales[0] ?? Object.entries(r.cot.errores).map(([k, v]) => `${r.catalogo.find((c) => c.ccober === k)?.nombre ?? k}: ${v}`)[0];
+          toast.error('Revisa el combo', e);
+          return false;
+        }
+        return true;
+      }} />
+    </div>
+  );
+}
+
+/** Mismo aspecto que CoberturasElegibles: obligatorias fijas, adicionales con casilla y suma escrita por cobertura. */
+function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotizacionCombo>>; intento: boolean }) {
+  const setCombo = useCotizacionStore((s) => s.setCombo);
+  const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
+  const xramo = useNombreRamo(r.cramo);
+  const { cramo, catalogo, elegidas, cot, moneda } = r;
+  const m = (n: number) => `${moneda} ${importe(n)}`;
+  const porCob = new Map(cot.coberturas.map((c) => [c.ccober, c]));
+  const alternar = (ccober: string, v: boolean) =>
+    setCombo(cramo, v ? { ...elegidas, [ccober]: '' } : Object.fromEntries(Object.entries(elegidas).filter(([k]) => k !== ccober)));
+
+  if (!catalogo.length) return <Aviso>{xramo} no tiene coberturas con tarifa vigente en Sis2000.</Aviso>;
+  return (
+    <SectionCard title={`Arma el combo · ${xramo}`} Icon={ListChecks} statusLabel={`Ramo ${cramo}`}
+      description={vistaTecnica
+        ? 'Marca las coberturas y escribe su suma. La prima de cada una es su suma × su tasa de Sis2000, o su prima fija.'
+        : 'Marca las coberturas y escribe su suma asegurada. Se muestra solo la prima total del combo.'}>
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full text-[0.78rem]">
+          <thead className="bg-slate-50 text-slate-600">
+            <tr>
+              <th className="text-left font-bold px-3 py-2">Cobertura</th>
+              <th className="text-right font-bold px-3 py-2">Suma asegurada</th>
+              {vistaTecnica && <th className="text-right font-bold px-3 py-2">Tasa</th>}
+              {vistaTecnica && <th className="text-right font-bold px-3 py-2">Prima</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {catalogo.map((c) => {
+              const marcada = c.obligatoria || elegidas[c.ccober] !== undefined;
+              const valor = elegidas[c.ccober] ?? '';
+              const x = porCob.get(c.ccober);
+              // El error se ve al escribir la suma o al intentar continuar; antes, solo los topes.
+              const err = marcada && (intento || valor !== '') ? cot.errores[c.ccober] : undefined;
+              const limites = topes(c.msumamin, c.msumamax);
+              return (
+                <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400')}>
+                  <td className="px-3 py-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={c.obligatoria} onChange={(e) => alternar(c.ccober, e.target.checked)} />
+                      <span className={marcada ? 'text-slate-700' : ''}>{c.nombre}{c.obligatoria ? ' · obligatoria' : ''}</span>
+                    </label>
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number" min={0} step="0.01" disabled={!marcada} value={valor} placeholder={marcada ? 'Suma' : ''}
+                      onChange={(e) => setCombo(cramo, { ...elegidas, [c.ccober]: e.target.value })}
+                      className={cn('w-32 rounded-lg border px-2 py-1 text-right tabular-nums disabled:bg-slate-50', err ? 'border-red-400' : 'border-slate-200')}
+                    />
+                    {(err || limites) && <p className={cn('text-[0.68rem] mt-0.5', err ? 'text-red-600' : 'text-slate-400')}>{err ?? limites}</p>}
+                  </td>
+                  {vistaTecnica && <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{c.pprima > 0 ? porcentaje(c.pprima) : c.mprima > 0 ? 'Prima fija' : '—'}</td>}
+                  {vistaTecnica && <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {intento && cot.generales.map((g) => <div key={g} className="mt-3"><Aviso tono="error">{g}</Aviso></div>)}
+      <div className="mt-4">
+        <TotalRc total={m(cot.prima_total)} detalle={`${cot.coberturas.length} ${cot.coberturas.length === 1 ? 'cobertura' : 'coberturas'} · suma asegurada ${m(cot.suma_asegurada)}`} />
+      </div>
+      <p className="text-[0.72rem] text-slate-500 mt-2">
+        Las obligatorias van siempre.{catalogo.some((c) => c.ccober === '1') && ' Ninguna adicional puede superar la suma de la cobertura básica.'} Tarifas vigentes de Sis2000.
       </p>
     </SectionCard>
   );
@@ -386,6 +507,7 @@ function adicionales(k: K, p: ParametrosRc): { nombre: string; porEmpleado: stri
 
 function CotizacionRc() {
   const prmRc = useParametrosStore((s) => s.rc);
+  const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
   const rc = useCotizacionStore((s) => s.rc);
   const setRcProducto = useCotizacionStore((s) => s.setRcProducto);
   const cot = useCotizacionRc();
@@ -466,7 +588,7 @@ function CotizacionRc() {
                       prima={sinErrores ? m(o.prima) : '—'} etiqueta={o.ajusteMinimo > 0 ? 'Prima mínima aplicada' : 'Prima neta'}>
                       <p>Por trabajador: <strong className="text-slate-700">{importe(o.limites[0])}</strong></p>
                       <p>Dos o más / evento: <strong className="text-slate-700">{importe(o.limites[1])}</strong></p>
-                      {o.primaOpcionales > 0 && <p>Adicionales: {importe(o.primaOpcionales)}</p>}
+                      {vistaTecnica && o.primaOpcionales > 0 && <p>Adicionales: {importe(o.primaOpcionales)}</p>}
                     </TarjetaOpcion>
                   ))}
                 </div>

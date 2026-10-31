@@ -23,7 +23,7 @@ export const MODULE_STEPS: ModuleStepConfig[] = [
     label: 'Producto',
     eyebrow: 'Paso 01 · Producto',
     title: 'Elige qué cotizar',
-    description: 'Tarifa RCG, RCP / RCE o un plan de Sis2000.',
+    description: 'Tarifa RCG, RCP / RCE, un plan de Sis2000 o un combo de coberturas.',
     Icon: Layers,
   },
   {

@@ -1,10 +1,10 @@
 // PDF oficial de cotización RCG: 2 páginas de cotización + 3 páginas de la Solicitud de Seguro RCG.
-// Con `plan` genera el mismo documento para un plan de Sis2000 (una sola columna: la suma y la prima del plan);
-// la Solicitud de Seguro RCG solo se agrega en el ramo 28.
+// Con `plan` genera el mismo documento para un plan de Sis2000 o un combo de coberturas (una sola columna: la
+// suma y la prima total); la Solicitud de Seguro RCG solo se agrega en el ramo 28.
 // Replica el documento del Apps Script de La Mundial (mismo logo, sello, textos y plantilla de solicitud),
 // pero en texto vectorial con pdf-lib en lugar de capturas html2canvas.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
-import type { AlternativaRcg } from '../tarifas/rcg';
+import { NOTA_MESA_TECNICA, type AlternativaRcg } from '../tarifas/rcg';
 
 export interface DatosPdfRcg {
   numero: string;
@@ -30,8 +30,10 @@ export interface DatosPdfRcg {
   condiciones: string[];
   /** Días de validez (15 por defecto). */
   vigenciaDias?: number;
-  /** Plan de Sis2000 cotizado (opción Planes Sis2000). */
+  /** Plan de Sis2000 cotizado (opción Planes Sis2000) o combo de coberturas. */
   plan?: PlanPdf;
+  /** Actividad restringida: la cotización queda sujeta a aprobación de la mesa técnica. */
+  mesaTecnica?: boolean;
 }
 
 export interface PlanPdf {
@@ -40,6 +42,8 @@ export interface PlanPdf {
   cplan: string;
   /** Ramo 28: se conservan los textos del RCG y la Solicitud de Seguro. */
   esRcg: boolean;
+  /** Combo de coberturas armado en el cotizador: no es un plan de Sis2000. */
+  combo?: boolean;
 }
 
 export interface AssetsPdfRcg {
@@ -88,6 +92,8 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   const plan = d.plan;
   const generico = !!plan && !plan.esRcg;
   const producto = generico ? plan.ramo : 'Responsabilidad Civil General';
+  // El combo usa el formato del plan genérico con sus propios rótulos.
+  const tipo = plan?.combo ? 'combo' : 'plan';
 
   let page!: PDFPage;
   let y = TOP;
@@ -195,7 +201,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   // Título
   const titulo = `COTIZACIÓN DE ${producto.toUpperCase()}`;
   texto(page, titulo, (W - ancho(titulo, 12, bold)) / 2, y - 10, 12, bold, C.navy);
-  const sub = plan ? `(${plan.nombre} · ${plan.cplan})` : '(Predios y Operaciones)';
+  const sub = plan ? (plan.combo ? `(${plan.nombre})` : `(${plan.nombre} · ${plan.cplan})`) : '(Predios y Operaciones)';
   texto(page, sub, (W - ancho(sub, 7.5)) / 2, y - 22, 7.5, regular, C.gris);
   y -= 32;
 
@@ -208,7 +214,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
       [[{ t: 'Tomador / Asegurado:', b: true }, { t: d.asegurado }], [{ t: 'Moneda de Cuenta:', b: true }, { t: d.moneda }]],
       [{ t: 'Cédula o RIF:', b: true }, { t: d.rif || 'N/A' }],
       ...(generico
-        ? [[{ t: 'Plan:', b: true }, { t: `${plan.nombre} (${plan.cplan})` }], [{ t: 'Bien o actividad asegurada:', b: true }, { t: d.actividadEspecifica }]] as Seg[][]
+        ? [[{ t: plan.combo ? 'Modalidad:' : 'Plan:', b: true }, { t: plan.combo ? plan.nombre : `${plan.nombre} (${plan.cplan})` }], [{ t: 'Bien o actividad asegurada:', b: true }, { t: d.actividadEspecifica }]] as Seg[][]
         : [[{ t: 'Índole:', b: true }, { t: d.indole }], [{ t: 'Índole específica:', b: true }, { t: d.actividadEspecifica }],
           ...(plan ? [[{ t: 'Plan:', b: true }, { t: `${plan.nombre} (${plan.cplan})` }]] : [])] as Seg[][]),
       'sep',
@@ -245,10 +251,21 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     y -= total + 16;
   }
 
+  // Actividad restringida: misma caja ámbar del deducible, antes del interés asegurable.
+  if (d.mesaTecnica) {
+    const size = 8.5;
+    const lineas = partir([{ t: `${NOTA_MESA_TECNICA}.`, b: true }, { t: 'La actividad asegurada es restringida: esta cotización requiere la aprobación de la mesa técnica de La Mundial.' }], CW - 20, size);
+    const alto = lineas.length * 11 + 14;
+    asegurar(alto);
+    page.drawRectangle({ x: L, y: y - alto, width: CW, height: alto, color: C.amberFondo, borderColor: C.amberBorde, borderWidth: 0.6 });
+    dibujarLineas(page, lineas, L + 10, y - 7 - size, CW - 20, size, 11, C.amberTinta);
+    y -= alto + 12;
+  }
+
   // Interés asegurable
   texto(page, 'INTERÉS ASEGURABLE', L, y - 10, 10, bold, C.navy);
   y -= 16;
-  if (generico) parrafo([{ t: `Ampara los riesgos descritos en las coberturas del ${plan.nombre}, hasta las sumas aseguradas indicadas y sujeto a los límites, términos y condiciones de la póliza a emitir.` }], 8.5, { justificar: true, despues: 8 });
+  if (generico) parrafo([{ t: `Ampara los riesgos descritos en las coberturas ${plan.combo ? 'de este combo' : `del ${plan.nombre}`}, hasta las sumas aseguradas indicadas y sujeto a los límites, términos y condiciones de la póliza a emitir.` }], 8.5, { justificar: true, despues: 8 });
   else parrafo([{ t: 'Ampara la Responsabilidad Civil General en que pueda incurrir el asegurado frente a terceros por lesiones corporales y/o daños a la propiedad, por los cuales sea legalmente responsable y obligado a pagar mediante sentencia firme y sujeto a los límites, términos y condiciones de la póliza a emitir, derivada de las operaciones que realiza el Asegurado o bajo el contrato indicado.' }], 8.5, { justificar: true, despues: 8 });
 
   // Tabla de límites por opción
@@ -263,10 +280,10 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     texto(page, sa, xCol(0) + (colOp * n - ancho(sa, s, bold)) / 2, y - 10.5, s, bold, C.blanco);
     y -= h;
     celda(page, L, y, colPrim, h, C.encabezado);
-    texto(page, plan ? 'Suma asegurada del plan / Año Póliza' : 'Límite máximo de responsabilidad por evento / Año Póliza', L + 4, y - 10.5, s, bold, C.tinta);
+    texto(page, plan ? `Suma asegurada del ${tipo} / Año Póliza` : 'Límite máximo de responsabilidad por evento / Año Póliza', L + 4, y - 10.5, s, bold, C.tinta);
     d.alternativas.forEach((alt, i) => {
       celda(page, xCol(i), y, colOp, h, C.encabezado);
-      const t = plan ? (/^PLAN/i.test(plan.cplan) ? plan.cplan : `PLAN ${plan.cplan}`) : `OPCIÓN ${alt.opcion}`;
+      const t = plan ? (plan.combo ? 'COMBO' : /^PLAN/i.test(plan.cplan) ? plan.cplan : `PLAN ${plan.cplan}`) : `OPCIÓN ${alt.opcion}`;
       texto(page, t, xCol(i) + (colOp - ancho(t, s, bold)) / 2, y - 10.5, s, bold, C.tinta);
     });
     y -= h;
@@ -277,7 +294,9 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
       derecha(page, importe(alt.limite), xCol(i) + colOp - 4, y - 10.5, s, regular, C.tinta);
     });
     y -= h + 10;
-    texto(page, plan ? 'Plan configurado en Sis2000: suma, prima y coberturas fijas del plan.' : 'Alternativas independientes. La prima corresponde exclusivamente a la opción elegida.', L, y, 6.5, regular, C.gris);
+    const nota = plan?.combo ? 'Combo de coberturas elegidas con las tarifas vigentes de Sis2000.'
+      : plan ? 'Plan configurado en Sis2000: suma, prima y coberturas fijas del plan.' : 'Alternativas independientes. La prima corresponde exclusivamente a la opción elegida.';
+    texto(page, nota, L, y, 6.5, regular, C.gris);
     y -= 14;
   }
 
@@ -316,7 +335,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
   // Primas por opción
   {
     asegurar(26);
-    texto(page, plan ? 'Prima anual del plan' : 'Prima a cobrar según la opción', L + 4, y - 10, 8, bold, C.tinta);
+    texto(page, plan?.combo ? 'Prima total del combo' : plan ? 'Prima anual del plan' : 'Prima a cobrar según la opción', L + 4, y - 10, 8, bold, C.tinta);
     d.alternativas.forEach((alt, i) => derecha(page, importe(alt.prima), xCol(i) + colOp - 4, y - 10, 8, bold, C.tinta));
     y -= 18;
     linea(page, L, y, R, y, 1.4, C.primaLinea);

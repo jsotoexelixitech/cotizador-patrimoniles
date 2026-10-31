@@ -45,4 +45,18 @@ describe('PDF de cotización RCG', () => {
     if (process.env.PDF_SALIDA_PLAN) writeFileSync(process.env.PDF_SALIDA_PLAN, bytes);
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2);
   });
+
+  it('combo de coberturas sujeto a la mesa técnica: cotización sin la solicitud RCG', async () => {
+    const bytes = await generarPdfRcg({
+      numero: 'RCG-2026-P654321', fecha: new Date(2026, 9, 31), asegurado: 'Taller Naval, C.A.', rif: 'J-12345678', moneda: 'USD',
+      indole: '', actividadEspecifica: 'Astillero y reparación de embarcaciones', correo: 'taller@correo.com', intermediario: '',
+      ubicacion: 'Puerto La Cruz', esContrato: false, numeroContrato: '', objetoObra: '', coasegurado: '', sucursal: 'Puerto La Cruz',
+      elaboradoPor: 'prueba', alternativas: [{ opcion: 'I', limite: 100000, prima: 725, primaMinimaAplicada: false }],
+      coberturas: [{ nombre: 'COMBINADO EMPRESARIAL (BÁSICA)', montos: [100000] }, { nombre: 'TERREMOTO', montos: [100000] }],
+      deducible: '', notaIgtf: true, condiciones: [], mesaTecnica: true,
+      plan: { ramo: 'COMBINADOS EMPRESARIAL', nombre: 'Combo de coberturas', cplan: 'COMBO-16', esRcg: false, combo: true },
+    }, assets);
+    if (process.env.PDF_SALIDA_COMBO) writeFileSync(process.env.PDF_SALIDA_COMBO, bytes);
+    expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2);
+  });
 });

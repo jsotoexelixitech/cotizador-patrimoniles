@@ -11,7 +11,7 @@ import { useCotizacionStore } from '../store/cotizacionStore';
 import { esPersonalizado, useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
 
-const NOMBRE_PRODUCTO = { rcg: 'RC General', rc: 'RC Patronal / Empresarial', planes: 'Planes Sis2000 (prueba)' } as const;
+const NOMBRE_PRODUCTO = { rcg: 'RC General', rc: 'RC Patronal / Empresarial', planes: 'Planes Sis2000 (prueba)', combo: 'Combo de coberturas' } as const;
 
 const VISTA_PARAMETROS = {
   eyebrow: 'Configuración · Tarifa',
@@ -63,7 +63,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
               <div className="no-imprimir flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => toast.info('¿Necesitas ayuda?', 'Actividades restringidas, límites mayores o tasas fuera de rango se cotizan con el Área Técnica de La Mundial.')}
+                  onClick={() => toast.info('¿Necesitas ayuda?', 'Las actividades restringidas se cotizan aquí, sujetas a aprobación de la mesa técnica. Límites mayores o tasas fuera de rango se cotizan con el Área Técnica de La Mundial.')}
                   className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-full glass-light text-slate-600 hover:text-indigo-600 text-xs font-bold transition-all hover:-translate-y-0.5"
                 >
                   <HelpCircle size={13} />

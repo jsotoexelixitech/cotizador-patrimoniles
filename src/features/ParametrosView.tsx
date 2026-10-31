@@ -8,6 +8,7 @@ import { Field, Input, Textarea } from '../components/ui/FormField';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Aviso } from '../components/ui/Aviso';
+import { ToggleSwitch } from '../components/ui/ToggleSwitch';
 import { cn } from '../lib/utils';
 import { esPersonalizado, exportarParametros, useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
@@ -78,7 +79,7 @@ const rangoInvalido = (min: number, max: number) => !(min >= 0) || !(max >= min)
 
 export function ParametrosView() {
   const [pestana, setPestana] = useState<'rcg' | 'rc'>('rcg');
-  const { rcg, rc, actualizado, restaurar, importar } = useParametrosStore();
+  const { rcg, rc, actualizado, restaurar, importar, vistaTecnica, setVistaTecnica } = useParametrosStore();
   const personalizado = esPersonalizado({ rcg, rc });
   const archivo = useRef<HTMLInputElement>(null);
 
@@ -118,6 +119,13 @@ export function ParametrosView() {
           }} />
         </div>
       </div>
+
+      <ToggleSwitch
+        checked={vistaTecnica}
+        onChange={setVistaTecnica}
+        label="Vista técnica"
+        description="Muestra la tasa y la prima de cada cobertura (perfiles técnicos). Apagada, el cliente solo ve la prima total, también en el resumen y en el PDF."
+      />
 
       <div className="flex flex-wrap gap-2">
         {([['rcg', 'RC General'], ['rc', 'RC Patronal / Empresarial']] as const).map(([v, t]) => (
@@ -238,7 +246,7 @@ function ParametrosRcgView() {
       <SectionCard title="Actividades especiales" description="Una por línea." Icon={ShieldAlert}>
         <div className="grid sm:grid-cols-3 gap-4">
           <Field label="Exigen clase de Industrias"><Lineas rows={8} value={p.industrias} onChange={(v) => set({ industrias: v })} /></Field>
-          <Field label="Restringidas (Área Técnica)"><Lineas rows={8} value={p.restringidas} onChange={(v) => set({ restringidas: v })} /></Field>
+          <Field label="Restringidas (mesa técnica)" hint="Se cotizan con aviso; la cotización queda sujeta a su aprobación."><Lineas rows={8} value={p.restringidas} onChange={(v) => set({ restringidas: v })} /></Field>
           <Field label="Palabras clave restringidas" hint="Fragmentos sin acentos que se buscan en el texto libre."><Lineas rows={8} value={p.palabrasRestringidas} onChange={(v) => set({ palabrasRestringidas: v })} /></Field>
         </div>
       </SectionCard>

@@ -12,8 +12,14 @@ interface ParametrosState {
   rcg: ParametrosRcg;
   rc: ParametrosRc;
   actualizado: string | null;
+  /**
+   * Perfiles técnicos: muestra la tasa y la prima de cada cobertura. Apagada (por defecto) el cliente solo ve la
+   * prima total, también en el PDF. No es tarifa: no cuenta como personalizada ni se exporta.
+   */
+  vistaTecnica: boolean;
   setRcg: (c: Partial<ParametrosRcg>) => void;
   setRc: (c: Partial<ParametrosRc>) => void;
+  setVistaTecnica: (v: boolean) => void;
   restaurar: (que: 'rcg' | 'rc' | 'todo') => void;
   importar: (json: unknown) => void;
 }
@@ -30,8 +36,10 @@ export const useParametrosStore = create<ParametrosState>()(
       rcg: clonar(PARAMETROS_RCG),
       rc: clonar(PARAMETROS_RC),
       actualizado: null,
+      vistaTecnica: false,
       setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c }, actualizado: ahora() })),
       setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c }, actualizado: ahora() })),
+      setVistaTecnica: (vistaTecnica) => set({ vistaTecnica }),
       restaurar: (que) => set((s) => ({
         rcg: que === 'rc' ? s.rcg : clonar(PARAMETROS_RCG),
         rc: que === 'rcg' ? s.rc : clonar(PARAMETROS_RC),
@@ -59,6 +67,7 @@ export const useParametrosStore = create<ParametrosState>()(
           rcg: { ...actual.rcg, ...(g.rcg ?? {}) },
           rc: { ...actual.rc, ...(g.rc ?? {}), bs: { ...actual.rc.bs, ...(g.rc?.bs ?? {}) } },
           actualizado: g.actualizado ?? null,
+          vistaTecnica: g.vistaTecnica === true,
         };
       },
     },

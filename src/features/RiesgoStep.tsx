@@ -5,10 +5,10 @@ import { SectionCard } from '../components/ui/SectionCard';
 import { Field, Input, Select } from '../components/ui/FormField';
 import { StepActions } from '../components/ui/StepActions';
 import { importe, porcentaje } from '../tarifas/comun';
-import { INDOLE_OTRA, tasaPromedio } from '../tarifas/rcg';
+import { AVISO_MESA_TECNICA, INDOLE_OTRA, tasaPromedio } from '../tarifas/rcg';
 import { useParametrosStore } from '../store/parametrosStore';
 import { actividadesDeClase, tasaMedia, type BaseNomina, type MonedaRc } from '../tarifas/rcp-rce';
-import { claseRc, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
+import { claseRc, useCotizacionRc, useCotizacionRcg, useCotizacionStore, useMesaTecnica } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
 import { RAMO_RCG } from '../tarifas/planes-rcg';
 import { toast } from '../store/toastStore';
@@ -16,46 +16,58 @@ import { toast } from '../store/toastStore';
 export function RiesgoStep() {
   const producto = useCotizacionStore((s) => s.producto);
   const ramoSel = useCotizacionStore((s) => s.ramoSel);
-  if (producto === 'planes' && ramoSel !== RAMO_RCG) return <RiesgoPlan />;
+  if (producto === 'combo' || (producto === 'planes' && ramoSel !== RAMO_RCG)) return <RiesgoPlan />;
   return producto === 'rc' ? <RiesgoRc /> : <RiesgoRcg />;
 }
 
+/** Actividad restringida: ya no bloquea; se avisa aquí y en la cotización, y el resumen y el PDF lo indican. */
+export function AvisoMesaTecnica() {
+  return <Aviso><strong>{AVISO_MESA_TECNICA}.</strong> Puedes continuar: la cotización quedará sujeta a su aprobación.</Aviso>;
+}
+
+const avisarMesaTecnica = () => toast.warning(AVISO_MESA_TECNICA, 'La cotización quedará sujeta a su aprobación.');
+
 const intentoApto = (pide: boolean, apto: string) => (pide && !(Number(apto) > 0) ? 'Indica el número de apartamento o unidad.' : undefined);
 
-/** Ramos de Sis2000 distintos del RCG: no hay tarifa por clase, solo la descripción del riesgo para la póliza. */
+/** Ramos de Sis2000 distintos del RCG y combos: no hay tarifa por clase, solo la descripción del riesgo. */
 function RiesgoPlan() {
   const rcg = useCotizacionStore((s) => s.rcg);
   const setRcg = useCotizacionStore((s) => s.setRcg);
-  const ramoSel = useCotizacionStore((s) => s.ramoSel);
+  const combo = useCotizacionStore((s) => s.producto === 'combo');
+  const cramo = useCotizacionStore((s) => (combo ? s.ramoCombo : s.ramoSel));
   const apartamento = useCotizacionStore((s) => s.comun.apartamento);
   const setComun = useCotizacionStore((s) => s.setComun);
-  // Hogar (38): Sis2000 identifica la póliza por cédula + plan + apartamento.
-  const pideApto = ramoSel === 38;
+  // Hogar (38): Sis2000 identifica la póliza por cédula + plan + apartamento. El combo no emite: no lo pide.
+  const pideApto = !combo && cramo === 38;
   const errorApto = intentoApto(pideApto, apartamento);
-  const xramo = usePlanesStore((s) => s.ramos.find((r) => r.cramo === ramoSel)?.xramo);
+  const xramo = usePlanesStore((s) => s.ramos.find((r) => r.cramo === cramo)?.xramo);
+  const mesaTecnica = useMesaTecnica();
   const [intento, setIntento] = useState(false);
   const error = intento && !rcg.actividadEspecifica.trim() ? 'Describe el bien o la actividad asegurada.' : undefined;
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Riesgo asegurado" description={xramo ? `Ramo ${xramo}` : undefined} Icon={Building2}>
+      <SectionCard title="Riesgo asegurado" description={xramo ? `Ramo ${xramo}` : cramo != null ? `Ramo ${cramo}` : undefined} Icon={Building2}>
         <Field label="Bien o actividad asegurada" full error={error}
-          hint="Va en la descripción del bien de la póliza (p. ej. nombre y matrícula de la embarcación, o el inmueble).">
+          hint={combo ? 'Aparece en la cotización como bien o actividad asegurada.' : 'Va en la descripción del bien de la póliza (p. ej. nombre y matrícula de la embarcación, o el inmueble).'}>
           <Input value={rcg.actividadEspecifica} maxLength={250} onChange={(e) => setRcg({ actividadEspecifica: e.target.value })} placeholder="Ej. Apartamento 5-B, Residencias Los Palos Grandes" />
         </Field>
         {pideApto && (
           <div className="grid sm:grid-cols-3 gap-4 mt-4">
             <Field label="N.º de apartamento / unidad" error={intento ? errorApto : undefined} hint="Solo números. Sis2000 identifica la póliza por cédula + plan + unidad.">
-              <Input inputMode="numeric" maxLength={6} value={apartamento} onChange={(e) => setComun({ apartamento: e.target.value.replace(/D/g, '') })} placeholder="Ej. 52" />
+              <Input inputMode="numeric" maxLength={6} value={apartamento} onChange={(e) => setComun({ apartamento: e.target.value.replace(/\D/g, '') })} placeholder="Ej. 52" />
             </Field>
           </div>
         )}
       </SectionCard>
 
+      {mesaTecnica && <AvisoMesaTecnica />}
+
       <StepActions onContinue={() => {
         setIntento(true);
         if (!rcg.actividadEspecifica.trim()) { toast.error('Revisa el riesgo', 'Describe el bien o la actividad asegurada.'); return false; }
         if (errorApto) { toast.error('Revisa el riesgo', errorApto); return false; }
+        if (mesaTecnica) avisarMesaTecnica();
         return true;
       }} />
     </div>
@@ -94,8 +106,8 @@ function RiesgoRcg() {
               <optgroup label="Clasificación obligatoria: Industrias">
                 {prm.industrias.map((v) => <option key={v} value={v}>{v}{!clase.industria ? ' (requiere clase Industrias)' : ''}</option>)}
               </optgroup>
-              <optgroup label="Restringidas — cotización por Área Técnica">
-                {prm.restringidas.map((v) => <option key={v} value={v}>⛔ {v}</option>)}
+              <optgroup label="Restringidas — sujetas a la mesa técnica">
+                {prm.restringidas.map((v) => <option key={v} value={v}>⚠ {v}</option>)}
               </optgroup>
             </Select>
           </Field>
@@ -105,13 +117,13 @@ function RiesgoRcg() {
         </div>
       </SectionCard>
 
-      {cot.restringida && <Aviso tono="error">Actividad restringida: debe cotizarla el Área Técnica. No se puede continuar en este cotizador.</Aviso>}
+      {cot.restringida && <AvisoMesaTecnica />}
 
       <StepActions onContinue={() => {
         setIntento(true);
-        if (cot.restringida) { toast.error('Actividad restringida', 'Debe cotizarla el Área Técnica de La Mundial.'); return false; }
         const e = cot.errores.indole ?? cot.errores.actividadEspecifica ?? cot.errores.clase;
         if (e) { toast.error('Revisa el riesgo', e); return false; }
+        if (cot.restringida) avisarMesaTecnica();
         return true;
       }} />
     </div>

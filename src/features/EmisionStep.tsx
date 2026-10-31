@@ -8,7 +8,8 @@ import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { importe, porcentaje } from '../tarifas/comun';
 import { NOMBRES } from '../tarifas/rcp-rce';
-import { rifCompleto, useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore } from '../store/cotizacionStore';
+import { NOTA_MESA_TECNICA } from '../tarifas/rcg';
+import { rifCompleto, useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, useMesaTecnica } from '../store/cotizacionStore';
 import { useWizardStore } from '../store/wizardStore';
 import { usePlanesStore } from '../store/planesStore';
 import { RAMO_RCG, armarEmisionPlan, primasTarifaRcg } from '../tarifas/planes-rcg';
@@ -17,6 +18,10 @@ import { TablaCoberturas, TotalRc } from './CotizacionStep';
 import { esPersonaNatural } from './TomadorStep';
 import { armarEmisionCoberturas } from '../tarifas/coberturas';
 import { useCotizacionCoberturas } from '../store/coberturasHook';
+import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
+
+/** El combo no tiene ruta de emisión: se emite como plan de Sis2000 creado en el Product Builder. */
+const NOTA_EMISION_COMBO = 'Para emitir este combo debe existir como plan en Sis2000: créalo en el Product Builder (Combos de coberturas) y emítelo desde Planes Sis2000.';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -33,12 +38,18 @@ export function EmisionStep() {
   const { comun: c, contrato: k } = s;
   const rcg = s.producto === 'rcg';
   const planes = s.producto === 'planes';
+  const combo = s.producto === 'combo';
   const resetPlanes = usePlanesStore((p) => p.reset);
   const listaPlanes = usePlanesStore((p) => p.planes);
   const ramos = usePlanesStore((p) => p.ramos);
   const cotRcg = useCotizacionRcg();
   const cotPlanes = useCotizacionPlanesRcg(listaPlanes[0]?.suma);
   const cobCot = useCotizacionCoberturas();
+  const cobCombo = useCotizacionCombo();
+  const xramoCombo = useNombreRamo(s.ramoCombo);
+  const mesaTecnica = useMesaTecnica();
+  // Sin vista técnica el cliente solo ve la prima total: el PDF lleva coberturas y sumas, sin la prima de cada una.
+  const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
   const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
   const [generando, setGenerando] = useState(false);
   // Número provisional hasta tener el correlativo oficial desde el backend.
@@ -56,7 +67,7 @@ export function EmisionStep() {
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
         ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
         sucursal: c.sucursal, elaboradoPor: c.emisor, alternativas: cotRcg.alternativas, coberturas: cotRcg.coberturas,
-        deducible: cotRcg.deducible, notaIgtf: cotRcg.notaIgtf, condiciones: cotRcg.condiciones, vigenciaDias,
+        deducible: cotRcg.deducible, notaIgtf: cotRcg.notaIgtf, condiciones: cotRcg.condiciones, vigenciaDias, mesaTecnica,
       }, await cargarAssetsRcg());
       descargarPdf(bytes, `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`);
       toast.success('Cotización descargada', `${numero} · 2 páginas de cotización + Solicitud de Seguro.`);
@@ -85,13 +96,39 @@ export function EmisionStep() {
           ? { opcion: 'I', limite: cobCot.cot.suma_asegurada, prima: cobCot.cot.prima_total, primaMinimaAplicada: false }
           : { opcion: 'I', limite: plan.suma, prima: plan.prima, primaMinimaAplicada: false }],
         coberturas: cobCot
-          ? cobCot.cot.coberturas.map((x) => ({ nombre: `${x.nombre} (prima ${importe(x.prima)})`, montos: [x.suma] }))
+          ? cobCot.cot.coberturas.map((x) => ({ nombre: vistaTecnica ? `${x.nombre} (prima ${importe(x.prima)})` : x.nombre, montos: [x.suma] }))
           : plan.coberturas.map((x) => ({ nombre: x.nombre, montos: [x.suma] })),
         deducible: esRcg ? cotPlanes.deducible : '', notaIgtf: true, condiciones: esRcg ? cotPlanes.condiciones : [], vigenciaDias,
-        plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg },
+        plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg }, mesaTecnica,
       }, await cargarAssetsRcg());
       descargarPdf(bytes, `Cotizacion_LaMundial_${plan.cplan}_${c.asegurado.trim().replace(/\s+/g, '_') || 'plan'}.pdf`);
       toast.success('Cotización descargada', `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}.`);
+    } catch (e) {
+      toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  /** Mismo PDF oficial con las coberturas y sumas del combo (formato de plan genérico, sin Solicitud RCG). */
+  const descargarCombo = async () => {
+    if (!cobCombo?.valida) { toast.error('El combo no está completo', 'Vuelve al paso de cotización.'); return; }
+    const { cot, moneda, cramo } = cobCombo;
+    setGenerando(true);
+    try {
+      const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const bytes = await generarPdfRcg({
+        numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda,
+        indole: '', actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
+        ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
+        sucursal: c.sucursal, elaboradoPor: c.emisor,
+        alternativas: [{ opcion: 'I', limite: cot.suma_asegurada, prima: cot.prima_total, primaMinimaAplicada: false }],
+        coberturas: cot.coberturas.map((x) => ({ nombre: vistaTecnica ? `${x.nombre} (prima ${importe(x.prima)})` : x.nombre, montos: [x.suma] })),
+        deducible: '', notaIgtf: !/^bs/i.test(moneda), condiciones: [], vigenciaDias, mesaTecnica,
+        plan: { ramo: xramoCombo, nombre: 'Combo de coberturas', cplan: `COMBO-${cramo}`, esRcg: false, combo: true },
+      }, await cargarAssetsRcg());
+      descargarPdf(bytes, `Cotizacion_LaMundial_Combo_${cramo}_${c.asegurado.trim().replace(/\s+/g, '_') || 'combo'}.pdf`);
+      toast.success('Cotización descargada', `${numero} · combo de ${xramoCombo}.`);
     } catch (e) {
       toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
     } finally {
@@ -116,18 +153,24 @@ export function EmisionStep() {
         </div>
       </SectionCard>
 
-      {rcg ? <ResumenRcg /> : planes ? <ResumenPlan /> : <ResumenRc />}
+      {mesaTecnica && (
+        <Aviso><strong>{NOTA_MESA_TECNICA}.</strong> La actividad es restringida: la mesa técnica de La Mundial debe aprobar esta cotización.</Aviso>
+      )}
+
+      {rcg ? <ResumenRcg /> : planes ? <ResumenPlan /> : combo ? <ResumenCombo /> : <ResumenRc />}
 
       {planes ? <EmitirPlan /> : (
-      <SectionCard title="Emisión de la póliza" description="La emisión se conecta con Sis2000 al habilitar los planes del producto." Icon={Lock}
-        statusLabel="Pendiente" statusTone="warning">
+      <SectionCard title="Emisión de la póliza" Icon={Lock} statusLabel={combo ? 'Requiere plan' : 'Pendiente'} statusTone="warning"
+        description={combo ? 'Un combo armado aquí solo se cotiza: se emite como plan de Sis2000.' : 'La emisión se conecta con Sis2000 al habilitar los planes del producto.'}>
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="primary" size="lg" disabled title="Pendiente de habilitar en Sis2000">
+          <Button variant="primary" size="lg" disabled title={combo ? 'El combo debe existir como plan en Sis2000' : 'Pendiente de habilitar en Sis2000'}>
             <FileCheck2 size={15} />
             Emitir póliza
           </Button>
           <p className="text-[0.78rem] text-slate-500 max-w-md">
-            {rcg
+            {combo
+              ? NOTA_EMISION_COMBO
+              : rcg
               ? 'RCG: ramo 28 · producto 89 (planes PLANI, PLANII y PLAN3). Falta que La Mundial habilite los planes del productor en Sis2000.'
               : 'RCP / RCE: falta confirmar con La Mundial el ramo y producto en Sis2000.'}
           </p>
@@ -136,14 +179,14 @@ export function EmisionStep() {
       )}
 
       <p className="text-[0.72rem] text-slate-500">
-        Cotización válida por {rcg ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
-        {(rcg || planes) && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
+        Cotización válida por {rcg || combo ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
+        {(rcg || planes || combo) && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
       </p>
 
       <StepActions continueLabel="" extra={(
         <>
-          {rcg || planes ? (
-            <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : descargarPlan} disabled={generando}>
+          {rcg || planes || combo ? (
+            <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : combo ? descargarCombo : descargarPlan} disabled={generando}>
               {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
               {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
             </Button>
@@ -171,6 +214,7 @@ function ResumenPlan() {
   const ramos = usePlanesStore((p) => p.ramos);
   const cot = useCotizacionPlanesRcg(planes[0]?.suma);
   const cobCot = useCotizacionCoberturas();
+  const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
   const plan = planes.find((p) => p.cplan === planSel);
   if (!plan) return <Aviso tono="error">No hay plan elegido: vuelve al paso de cotización.</Aviso>;
   const esRcg = plan.cramo === RAMO_RCG;
@@ -189,7 +233,7 @@ function ResumenPlan() {
       </div>
       <ul className="text-[0.78rem] text-slate-600 grid sm:grid-cols-2 gap-x-6 gap-y-0.5 list-disc pl-5">
         {cobCot
-          ? cobCot.cot.coberturas.map((x) => <li key={x.ccober}>{x.nombre} · {importe(x.suma)} · prima {importe(x.prima)}</li>)
+          ? cobCot.cot.coberturas.map((x) => <li key={x.ccober}>{x.nombre} · {importe(x.suma)}{vistaTecnica && ` · prima ${importe(x.prima)}`}</li>)
           : plan.coberturas.map((x) => <li key={x.nombre}>{x.nombre} · {importe(x.suma)}</li>)}
       </ul>
       {esRcg && <p className="text-[0.72rem] text-slate-500 mt-3"><strong>Deducible:</strong> {cot.deducible}</p>}
@@ -287,6 +331,30 @@ function EmitirPlan() {
   );
 }
 
+/** Combo de coberturas: coberturas y sumas; la prima de cada una solo con la vista técnica. */
+function ResumenCombo() {
+  const r = useCotizacionCombo();
+  const xramo = useNombreRamo(r?.cramo ?? null);
+  const actividad = useCotizacionStore((x) => x.rcg.actividadEspecifica);
+  const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
+  if (!r) return <Aviso tono="error">No hay combo cotizado: vuelve al paso de cotización.</Aviso>;
+  const { cot, moneda } = r;
+  const m = (n: number) => `${moneda} ${importe(n)}`;
+
+  return (
+    <SectionCard title={`Combo de coberturas · ${xramo}`} description={actividad} Icon={ShieldCheck} statusLabel={`Ramo ${r.cramo}`}>
+      <div className="grid sm:grid-cols-3 gap-4 mb-4">
+        <Dato label="Suma asegurada">{m(cot.suma_asegurada)}</Dato>
+        <Dato label="Prima total">{m(cot.prima_total)}</Dato>
+        <Dato label="Coberturas">{String(cot.coberturas.length)}</Dato>
+      </div>
+      <ul className="text-[0.78rem] text-slate-600 grid sm:grid-cols-2 gap-x-6 gap-y-0.5 list-disc pl-5">
+        {cot.coberturas.map((x) => <li key={x.ccober}>{x.nombre} · {importe(x.suma)}{vistaTecnica && ` · prima ${importe(x.prima)}`}</li>)}
+      </ul>
+    </SectionCard>
+  );
+}
+
 function ResumenRcg() {
   const rcg = useCotizacionStore((s) => s.rcg);
   const cot = useCotizacionRcg();
@@ -323,6 +391,7 @@ function ResumenRcg() {
 
 function ResumenRc() {
   const cot = useCotizacionRc();
+  const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
   const m = (n: number) => `${cot.simbolo} ${importe(n)}`;
 
   return (
@@ -336,7 +405,8 @@ function ResumenRc() {
             <Dato label="Dos o más trabajadores">{m(r.limites[1])}</Dato>
             <Dato label="Por evento / año póliza">{m(r.limites[2])}</Dato>
           </div>
-          {r.opciones && (
+          {/* Desglose de prima por opción: solo perfiles técnicos (este resumen es el que se imprime para el cliente). */}
+          {vistaTecnica && r.opciones && (
             <div className="overflow-x-auto rounded-xl border border-slate-200 mt-4">
               <table className="w-full text-[0.78rem]">
                 <thead className="bg-slate-50 text-slate-600">

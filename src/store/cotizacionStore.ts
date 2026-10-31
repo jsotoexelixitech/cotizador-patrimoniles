@@ -1,14 +1,18 @@
 import { useMemo } from 'react';
 import { create } from 'zustand';
 import { numeroONulo } from '../tarifas/comun';
-import { cotizarRcg, tasaPromedio, type MonedaRcg, type SolicitudRcg } from '../tarifas/rcg';
+import { RAMO_RCG } from '../tarifas/planes-rcg';
+import { actividadRestringida, cotizarRcg, tasaPromedio, type MonedaRcg, type ParametrosRcg, type SolicitudRcg } from '../tarifas/rcg';
 import {
   cotizarRc, opcionalesDe, type BaseNomina, type IdOpcion, type Modo, type MonedaRc, type ProductoEntrada, type SolicitudRc,
 } from '../tarifas/rcp-rce';
 import { useParametrosStore } from './parametrosStore';
 
-/** planes = planes de riesgos generales de Sis2000 (en el ramo 28, con las reglas del RCG). */
-export type Producto = 'rcg' | 'rc' | 'planes';
+/**
+ * planes = planes de riesgos generales de Sis2000 (en el ramo 28, con las reglas del RCG);
+ * combo = coberturas de un ramo elegidas una a una (solo cotiza).
+ */
+export type Producto = 'rcg' | 'rc' | 'planes' | 'combo';
 export type K = 'p' | 'e';
 
 export interface ProductoForm {
@@ -36,6 +40,9 @@ export interface CotizacionState {
   planSel: string;
   /** Ramos 16 y 38: suma escrita por cobertura (ccober → monto) y coberturas elegidas (null = todas las del plan). */
   coberturas: { sumas: Record<string, string>; elegidas: string[] | null };
+  /** Combo: ramo elegido y el combo armado en cada ramo (ccober → suma escrita; las obligatorias entran siempre). */
+  ramoCombo: number | null;
+  combos: Record<number, Record<string, string>>;
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
     claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
@@ -49,6 +56,8 @@ export interface CotizacionState {
   setRamoSel: (cramo: number) => void;
   setPlanSel: (cplan: string) => void;
   setCoberturas: (c: Partial<CotizacionState['coberturas']>) => void;
+  setRamoCombo: (cramo: number) => void;
+  setCombo: (cramo: number, elegidas: Record<string, string>) => void;
   reset: () => void;
 }
 
@@ -67,6 +76,8 @@ const inicial = () => ({
   ramoSel: null as number | null,
   planSel: '',
   coberturas: { sumas: {} as Record<string, string>, elegidas: null as string[] | null },
+  ramoCombo: null as number | null,
+  combos: {} as Record<number, Record<string, string>>,
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
     claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
@@ -84,6 +95,8 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
   setRamoSel: (ramoSel) => set((s) => (s.ramoSel === ramoSel ? {} : { ramoSel, planSel: '', coberturas: { sumas: {}, elegidas: null } })),
   setPlanSel: (planSel) => set((s) => (s.planSel === planSel ? {} : { planSel, coberturas: { sumas: {}, elegidas: null } })),
   setCoberturas: (c) => set((s) => ({ coberturas: { ...s.coberturas, ...c } })),
+  setRamoCombo: (ramoCombo) => set({ ramoCombo }),
+  setCombo: (cramo, elegidas) => set((s) => ({ combos: { ...s.combos, [cramo]: elegidas } })),
   reset: () => set(inicial()),
 }));
 
@@ -145,4 +158,22 @@ export function useCotizacionRc() {
   const s = useCotizacionStore();
   const p = useParametrosStore((x) => x.rc);
   return useMemo(() => cotizarRc(solicitudRc(s), p), [s.comun, s.contrato, s.rc, p]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/**
+ * Actividad restringida (petróleo, minería, astilleros…): no bloquea; la cotización queda sujeta a la mesa técnica.
+ * RCG y planes del ramo 28 eligen índole; los demás ramos y el combo solo describen la actividad. RC no tiene restringidas.
+ */
+export function sujetaAMesaTecnica(s: Pick<CotizacionState, 'producto' | 'ramoSel' | 'rcg'>, p: ParametrosRcg): boolean {
+  if (!s.producto || s.producto === 'rc') return false;
+  const conIndole = s.producto === 'rcg' || (s.producto === 'planes' && s.ramoSel === RAMO_RCG);
+  return (conIndole && actividadRestringida(s.rcg.indole, p)) || actividadRestringida(s.rcg.actividadEspecifica, p);
+}
+
+export function useMesaTecnica() {
+  const producto = useCotizacionStore((s) => s.producto);
+  const ramoSel = useCotizacionStore((s) => s.ramoSel);
+  const rcg = useCotizacionStore((s) => s.rcg);
+  const p = useParametrosStore((x) => x.rcg);
+  return useMemo(() => sujetaAMesaTecnica({ producto, ramoSel, rcg }, p), [producto, ramoSel, rcg, p]);
 }
