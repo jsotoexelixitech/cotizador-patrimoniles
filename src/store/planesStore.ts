@@ -1,7 +1,11 @@
 import { create } from 'zustand';
-import { cotizarPlan, emitirCoberturas, emitirPlan, listarPlanes, tarificarRamo } from '../api/patrimonial';
+import { coberturasDeRamo, cotizarPlan, emitirCoberturas, emitirPlan, listarPlanes, tarificarRamo } from '../api/patrimonial';
 import type { PlanTarifa } from '../tarifas/coberturas';
+import type { CoberturaRamo } from '../tarifas/combo';
 import { parsearCotizacionPlan, type PlanSis2000, type RamoCatalogo, type ResultadoEmision } from '../tarifas/planes-rcg';
+
+/** Coberturas de un ramo para el combo: consultando, cargadas o con el error para mostrar. */
+export interface CatalogoCombo { cargando: boolean; coberturas: CoberturaRamo[] | null; error: string | null }
 
 interface PlanesState {
   /** Catálogo de Sis2000 por ramo (valrep/planes/riesgos-generales). */
@@ -19,6 +23,9 @@ interface PlanesState {
   errorTarifa: string | null;
   emitiendo: boolean;
   emision: ResultadoEmision | null;
+  /** Opción combo: coberturas con tarifa vigente de cada ramo consultado (riesgos-generales/coberturas). */
+  catalogos: Record<number, CatalogoCombo>;
+  cargarCatalogo: (cramo: number) => Promise<void>;
   cargarTarifa: (cramo: number, cplan: string) => Promise<void>;
   cargarRamos: () => Promise<void>;
   cargar: (cramo: number) => Promise<void>;
@@ -30,11 +37,23 @@ interface PlanesState {
 const inicial = {
   ramos: [], cargandoRamos: false, errorRamos: null,
   ramoCotizado: null, planes: [], cargando: false, error: null,
-  tarifa: null, cargandoTarifa: false, errorTarifa: null, emitiendo: false, emision: null,
+  tarifa: null, cargandoTarifa: false, errorTarifa: null, emitiendo: false, emision: null, catalogos: {},
 };
 
 export const usePlanesStore = create<PlanesState>((set, get) => ({
   ...inicial,
+  // Un estado por ramo: cambiar de ramo mientras otro carga no pisa nada; con error se puede reintentar.
+  cargarCatalogo: async (cramo) => {
+    const c = get().catalogos[cramo];
+    if (c?.cargando || c?.coberturas) return;
+    const poner = (x: CatalogoCombo) => set((s) => ({ catalogos: { ...s.catalogos, [cramo]: x } }));
+    poner({ cargando: true, coberturas: null, error: null });
+    try {
+      poner({ cargando: false, coberturas: await coberturasDeRamo(cramo), error: null });
+    } catch (e) {
+      poner({ cargando: false, coberturas: null, error: e instanceof Error ? e.message : String(e) });
+    }
+  },
   cargarRamos: async () => {
     if (get().cargandoRamos) return;
     set({ cargandoRamos: true, errorRamos: null });

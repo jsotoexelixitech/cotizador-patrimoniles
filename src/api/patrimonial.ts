@@ -1,12 +1,13 @@
 // Partner patrimonial de nest-api (paquete @quand-mind/api_planes_v2), el mismo que usa Emisión, el catálogo
-// de planes de riesgos generales (valrep) y la ruta propia del cotizador por coberturas (riesgos-generales).
+// de planes de riesgos generales (valrep) y las rutas propias del cotizador por coberturas (riesgos-generales).
 // Va por el proxy /nest de vite.config.ts, que agrega la key: nunca llega al navegador.
 import { errorDeRespuesta, parsearCatalogo, parsearEmision, type RamoCatalogo, type ResultadoEmision } from '../tarifas/planes-rcg';
 import { parsearTarifa, type PlanTarifa } from '../tarifas/coberturas';
+import { parsearCoberturasRamo, type CoberturaRamo } from '../tarifas/combo';
 
 const BASE = '/nest/api/v1/partner/starter/patrimonial';
 
-async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'catalogo' | 'tarificador'): Promise<unknown> {
+async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'catalogo' | 'tarificador' | 'coberturas'): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(url, init);
@@ -23,6 +24,11 @@ async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'c
   if (res.status === 404 && ruta === 'catalogo') throw new Error('nest-api sin la ruta valrep/planes/riesgos-generales: falta desplegar la versión nueva.');
   if (res.status === 404 && ruta === 'tarificador' && !errorDeRespuesta({ status: false, ...(data as object) })?.includes('plan')) {
     throw new Error('nest-api sin la ruta riesgos-generales/tarifa: falta desplegar la versión nueva.');
+  }
+  if (res.status === 404 && ruta === 'coberturas') {
+    // Sin mensaje propio o con el "Cannot GET" de Nest: ese nest-api todavía no tiene la ruta.
+    const m = (data as { message?: unknown }).message;
+    throw new Error(typeof m === 'string' && m && !/^Cannot GET/i.test(m) ? m : 'La ruta de coberturas por ramo aún no está desplegada en este ambiente.');
   }
   if (res.status === 403 && url.includes('riesgos-generales/emision')) {
     throw new Error('La key del cotizador no tiene el permiso emissions:riesgos-generales: hay que agregárselo en nest-api.');
@@ -47,6 +53,11 @@ export const emitirPlan = async (payload: unknown): Promise<ResultadoEmision> =>
 /** Tarifa por cobertura del plan (ramos 16 y 38), ruta propia del cotizador en nest-api. */
 export async function tarificarRamo(cramo: number, cplan: string): Promise<PlanTarifa | null> {
   return parsearTarifa(await pedir(`/nest/api/v1/riesgos-generales/tarifa?cramo=${cramo}&cplan=${encodeURIComponent(cplan)}`, { method: 'GET' }, 'tarificador'));
+}
+
+/** Combo de coberturas: todas las coberturas con tarifa vigente del ramo, sin plan (ruta propia del cotizador). */
+export async function coberturasDeRamo(cramo: number): Promise<CoberturaRamo[]> {
+  return parsearCoberturasRamo(await pedir(`/nest/api/v1/riesgos-generales/coberturas?cramo=${cramo}`, { method: 'GET' }, 'coberturas'));
 }
 
 /** Emisión con las coberturas y sumas elegidas; nest-api recalcula la prima antes de emitir. */
