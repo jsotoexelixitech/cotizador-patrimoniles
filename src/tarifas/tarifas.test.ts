@@ -34,8 +34,16 @@ describe('RCG', () => {
     esContrato: false, numeroContrato: '', objetoObra: '', coasegurado: '', limite: 50000, tasa: 0.5, condiciones: [2],
   };
 
-  it('bloquea actividades restringidas e índoles de industria fuera de su clase', () => {
-    expect(cotizarRcg({ ...base, actividadEspecifica: 'Venta de fuegos artificiales' }).restringida).toBe(true);
+  it('actividades restringidas: se cotizan con aviso de mesa técnica, sin error', () => {
+    const r = cotizarRcg({ ...base, actividadEspecifica: 'Venta de fuegos artificiales' });
+    expect([r.restringida, r.errores, r.alternativas.length]).toEqual([true, {}, 3]);
+    // La índole restringida no exige clase: la evalúa la mesa técnica.
+    const i = cotizarRcg({ ...base, indole: 'Actividades petroleras' });
+    expect([i.restringida, i.errores.indole, i.alternativas.length]).toEqual([true, undefined, 3]);
+    expect(cotizarRcg(base).restringida).toBe(false);
+  });
+
+  it('bloquea índoles de industria fuera de su clase', () => {
     expect(cotizarRcg({ ...base, indole: 'Construcción' }).errores.indole).toMatch(/Industrias/);
     expect(cotizarRcg({ ...base, indole: 'Construcción', clase: 4, tasa: 0.5 }).errores.indole).toBeUndefined();
   });

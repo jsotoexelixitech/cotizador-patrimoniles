@@ -13,7 +13,7 @@ export interface ParametrosRcg {
   clases: ClaseRcg[];
   /** Índoles que exigen una clase marcada como industria. */
   industrias: string[];
-  /** Actividades que solo cotiza el Área Técnica. */
+  /** Actividades sujetas a evaluación de la mesa técnica: se cotizan, pero la cotización queda sujeta a su aprobación. */
   restringidas: string[];
   /** Fragmentos (sin acentos) que también marcan una actividad como restringida. */
   palabrasRestringidas: string[];
@@ -102,6 +102,10 @@ export const PARAMETROS_RCG: ParametrosRcg = {
   vigenciaDias: 15,
 };
 
+/** Actividad restringida (acuerdo del 30-oct-2026): ya no bloquea; aviso en pantalla y nota en el resumen y el PDF. */
+export const AVISO_MESA_TECNICA = 'Actividad sujeta a evaluación de la mesa técnica';
+export const NOTA_MESA_TECNICA = 'Sujeto a aprobación de la mesa técnica';
+
 export function actividadRestringida(texto: string, p: ParametrosRcg = PARAMETROS_RCG): boolean {
   const valor = normalizar(texto);
   if (!valor) return false;
@@ -166,7 +170,7 @@ export type ErroresRcg = Partial<Record<keyof SolicitudRcg, string>>;
 
 export interface CotizacionRcg {
   errores: ErroresRcg;
-  /** Actividad restringida: va al Área Técnica, no se cotiza automáticamente. */
+  /** Actividad restringida: se cotiza igual, sujeta a aprobación de la mesa técnica (aviso, no error). */
   restringida: boolean;
   alternativas: AlternativaRcg[];
   coberturas: { nombre: string; montos: number[] }[];
@@ -189,13 +193,13 @@ export function cotizarRcg(s: SolicitudRcg, p: ParametrosRcg = PARAMETROS_RCG): 
   if (!CORREO_RE.test(s.correoDestinatario.trim())) e.correoDestinatario = 'El correo del tomador es obligatorio y debe ser válido.';
   if (!clase) e.clase = 'Clase de riesgo no permitida.';
 
-  const restringida = actividadRestringida(s.indole, p) || actividadRestringida(s.actividadEspecifica, p);
+  // Restringida: se cotiza con cualquier clase y queda marcada para la mesa técnica (antes bloqueaba).
+  const indoleRestringida = actividadRestringida(s.indole, p);
+  const restringida = indoleRestringida || actividadRestringida(s.actividadEspecifica, p);
   if (!s.indole) e.indole = 'Seleccione una índole específica.';
-  else if (actividadRestringida(s.indole, p)) e.indole = 'Cotización por Área Técnica. Esta actividad no puede continuar en este cotizador.';
-  else if (clase && p.industrias.includes(s.indole) && !clase.industria) e.indole = 'Esta índole corresponde a una clase de Industrias. Seleccione esa clase de riesgo.';
-  else if (clase && s.indole !== INDOLE_OTRA && !p.industrias.includes(s.indole) && !clase.indoles.includes(s.indole)) e.indole = 'La índole no corresponde a la clase seleccionada.';
+  else if (!indoleRestringida && clase && p.industrias.includes(s.indole) && !clase.industria) e.indole = 'Esta índole corresponde a una clase de Industrias. Seleccione esa clase de riesgo.';
+  else if (!indoleRestringida && clase && s.indole !== INDOLE_OTRA && !p.industrias.includes(s.indole) && !clase.indoles.includes(s.indole)) e.indole = 'La índole no corresponde a la clase seleccionada.';
   if (!s.actividadEspecifica.trim()) e.actividadEspecifica = 'Describa la actividad específica.';
-  else if (actividadRestringida(s.actividadEspecifica, p)) e.actividadEspecifica = 'Actividad restringida. Debe ser evaluada por el Área Técnica; no puede cotizarse automáticamente.';
 
   if (s.esContrato) {
     if (!s.numeroContrato.trim()) e.numeroContrato = 'Indique el número de contrato.';
