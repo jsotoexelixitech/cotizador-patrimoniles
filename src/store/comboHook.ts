@@ -3,9 +3,9 @@ import { cotizarCombo, monedaCombo } from '../tarifas/combo';
 import { useCotizacionStore } from './cotizacionStore';
 import { usePlanesStore } from './planesStore';
 
-/** Nombre del ramo según el catálogo de Sis2000; un ramo escrito a mano que no está ahí queda como "Ramo N". */
+/** Nombre del ramo según los ramos del combo o el catálogo de planes de Sis2000; si no está, "Ramo N". */
 export function useNombreRamo(cramo: number | null) {
-  const xramo = usePlanesStore((s) => s.ramos.find((r) => r.cramo === cramo)?.xramo);
+  const xramo = usePlanesStore((s) => (s.ramosCombo?.find((r) => r.cramo === cramo) ?? s.ramos.find((r) => r.cramo === cramo))?.xramo);
   return xramo ?? (cramo == null ? '' : `Ramo ${cramo}`);
 }
 

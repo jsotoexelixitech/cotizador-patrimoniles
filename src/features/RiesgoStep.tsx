@@ -40,7 +40,7 @@ function RiesgoPlan() {
   // Hogar (38): Sis2000 identifica la póliza por cédula + plan + apartamento. El combo no emite: no lo pide.
   const pideApto = !combo && cramo === 38;
   const errorApto = intentoApto(pideApto, apartamento);
-  const xramo = usePlanesStore((s) => s.ramos.find((r) => r.cramo === cramo)?.xramo);
+  const xramo = usePlanesStore((s) => (s.ramos.find((r) => r.cramo === cramo) ?? s.ramosCombo?.find((r) => r.cramo === cramo))?.xramo);
   const mesaTecnica = useMesaTecnica();
   const [intento, setIntento] = useState(false);
   const error = intento && !rcg.actividadEspecifica.trim() ? 'Describe el bien o la actividad asegurada.' : undefined;

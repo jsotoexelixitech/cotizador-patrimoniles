@@ -4,10 +4,14 @@
 import { errorDeRespuesta, parsearCatalogo, parsearEmision, type RamoCatalogo, type ResultadoEmision } from '../tarifas/planes-rcg';
 import { parsearTarifa, type PlanTarifa } from '../tarifas/coberturas';
 import { parsearCoberturasRamo, type CoberturaRamo } from '../tarifas/combo';
+import { parsearRamos, type RamoPatrimonial } from '../tarifas/ramos';
 
 const BASE = '/nest/api/v1/partner/starter/patrimonial';
 
-async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'catalogo' | 'tarificador' | 'coberturas'): Promise<unknown> {
+/** 404 de una ruta que ese nest-api todavía no tiene: falta desplegar la versión nueva. */
+class RutaSinDesplegar extends Error {}
+
+async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'catalogo' | 'tarificador' | 'coberturas' | 'ramos'): Promise<unknown> {
   let res: Response;
   try {
     res = await fetch(url, init);
@@ -22,6 +26,8 @@ async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'c
       : 'Proxy sin configurar: define NEST_API_URL en .env.local y reinicia npm run dev.');
   }
   if (res.status === 404 && ruta === 'catalogo') throw new Error('nest-api sin la ruta valrep/planes/riesgos-generales: falta desplegar la versión nueva.');
+  // GET ramos no tiene parámetros ni responde 404 por sí misma: un 404 es que ese nest-api aún no la tiene.
+  if (res.status === 404 && ruta === 'ramos') throw new RutaSinDesplegar('nest-api sin la ruta riesgos-generales/ramos.');
   if (res.status === 404 && ruta === 'tarificador' && !errorDeRespuesta({ status: false, ...(data as object) })?.includes('plan')) {
     throw new Error('nest-api sin la ruta riesgos-generales/tarifa: falta desplegar la versión nueva.');
   }
@@ -53,6 +59,16 @@ export const emitirPlan = async (payload: unknown): Promise<ResultadoEmision> =>
 /** Tarifa por cobertura del plan (ramos 16 y 38), ruta propia del cotizador en nest-api. */
 export async function tarificarRamo(cramo: number, cplan: string): Promise<PlanTarifa | null> {
   return parsearTarifa(await pedir(`/nest/api/v1/riesgos-generales/tarifa?cramo=${cramo}&cplan=${encodeURIComponent(cplan)}`, { method: 'GET' }, 'tarificador'));
+}
+
+/** Combo: todos los ramos patrimoniales de Sis2000 (maramos). null = ese nest-api aún no tiene la ruta (404). */
+export async function listarRamosPatrimoniales(): Promise<RamoPatrimonial[] | null> {
+  try {
+    return parsearRamos(await pedir('/nest/api/v1/riesgos-generales/ramos', { method: 'GET' }, 'ramos'));
+  } catch (e) {
+    if (e instanceof RutaSinDesplegar) return null;
+    throw e;
+  }
 }
 
 /** Combo de coberturas: todas las coberturas con tarifa vigente del ramo, sin plan (ruta propia del cotizador). */

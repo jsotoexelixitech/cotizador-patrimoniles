@@ -1,8 +1,11 @@
 import { create } from 'zustand';
-import { coberturasDeRamo, cotizarPlan, emitirCoberturas, emitirPlan, listarPlanes, tarificarRamo } from '../api/patrimonial';
+import {
+  coberturasDeRamo, cotizarPlan, emitirCoberturas, emitirPlan, listarPlanes, listarRamosPatrimoniales, tarificarRamo,
+} from '../api/patrimonial';
 import type { PlanTarifa } from '../tarifas/coberturas';
 import type { CoberturaRamo } from '../tarifas/combo';
 import { parsearCotizacionPlan, type PlanSis2000, type RamoCatalogo, type ResultadoEmision } from '../tarifas/planes-rcg';
+import { ramosDesdePlanes, type RamoPatrimonial } from '../tarifas/ramos';
 
 /** Coberturas de un ramo para el combo: consultando, cargadas o con el error para mostrar. */
 export interface CatalogoCombo { cargando: boolean; coberturas: CoberturaRamo[] | null; error: string | null }
@@ -23,6 +26,15 @@ interface PlanesState {
   errorTarifa: string | null;
   emitiendo: boolean;
   emision: ResultadoEmision | null;
+  /**
+   * Opción combo: todos los ramos patrimoniales (riesgos-generales/ramos); null = sin consultar. Con respaldo = true
+   * son los ramos con planes porque ese nest-api aún no tiene la ruta.
+   */
+  ramosCombo: RamoPatrimonial[] | null;
+  ramosComboRespaldo: boolean;
+  cargandoRamosCombo: boolean;
+  errorRamosCombo: string | null;
+  cargarRamosCombo: () => Promise<void>;
   /** Opción combo: coberturas con tarifa vigente de cada ramo consultado (riesgos-generales/coberturas). */
   catalogos: Record<number, CatalogoCombo>;
   cargarCatalogo: (cramo: number) => Promise<void>;
@@ -38,6 +50,7 @@ const inicial = {
   ramos: [], cargandoRamos: false, errorRamos: null,
   ramoCotizado: null, planes: [], cargando: false, error: null,
   tarifa: null, cargandoTarifa: false, errorTarifa: null, emitiendo: false, emision: null, catalogos: {},
+  ramosCombo: null, ramosComboRespaldo: false, cargandoRamosCombo: false, errorRamosCombo: null,
 };
 
 export const usePlanesStore = create<PlanesState>((set, get) => ({
@@ -52,6 +65,22 @@ export const usePlanesStore = create<PlanesState>((set, get) => ({
       poner({ cargando: false, coberturas: await coberturasDeRamo(cramo), error: null });
     } catch (e) {
       poner({ cargando: false, coberturas: null, error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+  cargarRamosCombo: async () => {
+    if (get().cargandoRamosCombo) return;
+    set({ cargandoRamosCombo: true, errorRamosCombo: null });
+    try {
+      const ramos = await listarRamosPatrimoniales();
+      if (ramos) {
+        set({ ramosCombo: ramos, ramosComboRespaldo: false, cargandoRamosCombo: false });
+        return;
+      }
+      // Ruta sin desplegar: los ramos con planes (la misma lista de "Planes Sis2000"), igual solo de la lista.
+      const planes = get().ramos.length ? get().ramos : await listarPlanes();
+      set({ ramos: planes, ramosCombo: ramosDesdePlanes(planes), ramosComboRespaldo: true, cargandoRamosCombo: false });
+    } catch (e) {
+      set({ cargandoRamosCombo: false, errorRamosCombo: e instanceof Error ? e.message : String(e) });
     }
   },
   cargarRamos: async () => {

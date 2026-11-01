@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Building2, Check, FlaskConical, HardHat, Layers, Loader2, Puzzle, RefreshCw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Building2, Check, FlaskConical, HardHat, Layers, Loader2, Puzzle, RefreshCw, Search } from 'lucide-react';
 import { Aviso } from '../components/ui/Aviso';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/FormField';
@@ -7,7 +7,7 @@ import { SectionCard } from '../components/ui/SectionCard';
 import { StepActions } from '../components/ui/StepActions';
 import { cn } from '../lib/utils';
 import { importe } from '../tarifas/comun';
-import { RAMOS_EXCLUIDOS } from '../tarifas/planes-rcg';
+import { detalleRamo, filtrarRamos, RAMO_NO_EXISTE, ramoDeBusqueda, seleccionable, type RamoPatrimonial } from '../tarifas/ramos';
 import { useCotizacionStore, type Producto } from '../store/cotizacionStore';
 import { useNombreRamo } from '../store/comboHook';
 import { usePlanesStore } from '../store/planesStore';
@@ -46,8 +46,9 @@ export function ProductoStep() {
   const setPlanSel = useCotizacionStore((s) => s.setPlanSel);
   const { ramos, cargandoRamos, errorRamos, cargarRamos } = usePlanesStore();
 
+  // El combo consulta su propia lista de ramos (RamoCombo).
   useEffect(() => {
-    if ((producto === 'planes' || producto === 'combo') && !ramos.length && !cargandoRamos && !errorRamos) void cargarRamos();
+    if (producto === 'planes' && !ramos.length && !cargandoRamos && !errorRamos) void cargarRamos();
   }, [producto]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ramo = ramos.find((r) => r.cramo === ramoSel);
@@ -190,7 +191,7 @@ export function ProductoStep() {
 function comboListo(): boolean {
   const cramo = useCotizacionStore.getState().ramoCombo;
   const cat = cramo == null ? undefined : usePlanesStore.getState().catalogos[cramo];
-  if (cramo == null) { toast.warning('Selecciona un ramo', 'Elige o escribe el ramo de Sis2000 del combo.'); return false; }
+  if (cramo == null) { toast.warning('Selecciona un ramo', 'Busca y elige el ramo de Sis2000 del combo.'); return false; }
   if (!cat || cat.cargando) { toast.warning('Cargando coberturas', 'Espera las coberturas del ramo.'); return false; }
   if (cat.error) { toast.error('No se pudieron cargar las coberturas', cat.error); return false; }
   if (!cat.coberturas?.length) { toast.warning('Ramo sin coberturas', 'Ese ramo no tiene coberturas con tarifa vigente en Sis2000.'); return false; }
@@ -199,26 +200,47 @@ function comboListo(): boolean {
 
 const plural = (n: number, una: string, varias: string) => `${n} ${n === 1 ? una : varias}`;
 
-/** Combo: ramo de la lista de Sis2000 o escrito a mano; al elegirlo se consultan todas sus coberturas vigentes. */
+/**
+ * Combo: el ramo se busca por nombre o número y solo se elige de la lista de Sis2000 (riesgos-generales/ramos, o los
+ * ramos con planes si ese nest-api aún no tiene la ruta); al elegirlo se consultan todas sus coberturas vigentes.
+ */
 function RamoCombo() {
   const ramoCombo = useCotizacionStore((s) => s.ramoCombo);
   const setRamoCombo = useCotizacionStore((s) => s.setRamoCombo);
-  const { ramos, cargandoRamos, errorRamos, cargarRamos } = usePlanesStore();
+  const lista = usePlanesStore((s) => s.ramosCombo);
+  const respaldo = usePlanesStore((s) => s.ramosComboRespaldo);
+  const cargandoRamos = usePlanesStore((s) => s.cargandoRamosCombo);
+  const errorRamos = usePlanesStore((s) => s.errorRamosCombo);
+  const cargarRamos = usePlanesStore((s) => s.cargarRamosCombo);
   const catalogo = usePlanesStore((s) => (ramoCombo == null ? undefined : s.catalogos[ramoCombo]));
   const cargarCatalogo = usePlanesStore((s) => s.cargarCatalogo);
   const xramo = useNombreRamo(ramoCombo);
-  const [otro, setOtro] = useState('');
+  const [busqueda, setBusqueda] = useState('');
+  const [aviso, setAviso] = useState<string | null>(null);
+  const ramos = useMemo(() => lista ?? [], [lista]);
+  const resultados = useMemo(() => filtrarRamos(ramos, busqueda), [ramos, busqueda]);
+  // Lo escrito no coincide con ningún ramo de la lista: solo se avisa, no se consulta nada.
+  const sinCoincidencias = ramos.length > 0 && busqueda.trim() !== '' && resultados.length === 0;
+  const mensaje = sinCoincidencias ? RAMO_NO_EXISTE : aviso;
+
+  useEffect(() => {
+    if (lista == null && !cargandoRamos && !errorRamos) void cargarRamos();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (ramoCombo != null) void cargarCatalogo(ramoCombo);
   }, [ramoCombo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const usarOtro = () => {
-    const n = Number(otro);
-    if (!Number.isInteger(n) || n <= 0) { toast.warning('Ramo inválido', 'Escribe el número del ramo de Sis2000 (ej. 16).'); return; }
-    if (RAMOS_EXCLUIDOS.includes(n)) { toast.warning('Ramo no disponible', 'La Mundial no cotiza ese ramo por este canal.'); return; }
-    setRamoCombo(n);
-    setOtro('');
+  const elegir = (r: RamoPatrimonial) => {
+    if (!seleccionable(r)) return;
+    setRamoCombo(r.cramo);
+    setAviso(null);
+  };
+  // Enter: el ramo con ese número o el primero elegible de los resultados; si no hay, solo el aviso.
+  const elegirConEnter = () => {
+    const r = ramoDeBusqueda(ramos, busqueda);
+    if (r.ramo) elegir(r.ramo);
+    else setAviso(r.aviso);
   };
 
   const coberturas = catalogo?.coberturas;
@@ -227,33 +249,60 @@ function RamoCombo() {
   return (
     <div className="mt-4">
       <p className="text-[0.78rem] font-bold text-slate-600 tracking-wide mb-2">Ramo de Sis2000</p>
-      {cargandoRamos && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Consultando los ramos de Sis2000…</p>}
+      <div className="relative max-w-md">
+        <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Input
+          type="search"
+          value={busqueda}
+          onChange={(e) => { setBusqueda(e.target.value); setAviso(null); }}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            elegirConEnter();
+          }}
+          placeholder="Buscar ramo por nombre o número"
+          aria-label="Buscar ramo por nombre o número"
+          autoComplete="off"
+          enterKeyHint="search"
+          style={{ paddingLeft: '2.5rem' }}
+        />
+      </div>
+      <p className="mt-1.5 text-[0.72rem] text-slate-500">Escribe parte del nombre o el número del ramo; Enter elige el primero de la lista.</p>
+      {cargandoRamos && <p className="mt-3 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Consultando los ramos de Sis2000…</p>}
       {errorRamos && (
-        <div className="space-y-3 mb-3">
-          <Aviso tono="error">{errorRamos} Puedes escribir el número del ramo abajo.</Aviso>
+        <div className="mt-3 space-y-3">
+          <Aviso tono="error">{errorRamos}</Aviso>
           <Button variant="secondary" size="sm" onClick={() => void cargarRamos()}><RefreshCw size={13} /> Reintentar</Button>
         </div>
       )}
-      <div className="flex flex-wrap gap-2">
-        {ramos.map((r) => (
-          <button
-            key={r.cramo}
-            type="button"
-            onClick={() => setRamoCombo(r.cramo)}
-            className={cn(
-              'px-4 py-2 rounded-full text-sm font-bold border transition-all',
-              ramoCombo === r.cramo ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300',
-            )}
-          >
-            {r.xramo} <span className="font-normal opacity-75">· ramo {r.cramo}</span>
-          </button>
-        ))}
-      </div>
-      <form className="mt-3 flex items-center gap-2 max-w-sm" onSubmit={(e) => { e.preventDefault(); usarOtro(); }}>
-        <Input inputMode="numeric" maxLength={4} value={otro} onChange={(e) => setOtro(e.target.value.replace(/\D/g, ''))}
-          placeholder="¿Otro ramo? Escribe su número" aria-label="Número de ramo de Sis2000" />
-        <Button type="submit" variant="secondary" size="sm">Usar</Button>
-      </form>
+      {respaldo && (
+        <p className="mt-2 text-[0.72rem] text-slate-500">Este ambiente aún no tiene la lista completa de ramos: se muestran los ramos con planes en Sis2000.</p>
+      )}
+      {lista && !lista.length && <div className="mt-3"><Aviso>Sis2000 no devolvió ramos patrimoniales.</Aviso></div>}
+      {mensaje && <div className="mt-3"><Aviso>{mensaje}</Aviso></div>}
+      {resultados.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-2 max-h-72 overflow-y-auto p-0.5">
+          {resultados.map((r) => {
+            const elegible = seleccionable(r);
+            return (
+              <button
+                key={r.cramo}
+                type="button"
+                disabled={!elegible}
+                aria-pressed={ramoCombo === r.cramo}
+                title={elegible ? undefined : 'Sin coberturas con tarifa vigente en Sis2000.'}
+                onClick={() => elegir(r)}
+                className={cn(
+                  'px-4 py-2 rounded-full text-sm font-bold border transition-all disabled:opacity-40 disabled:cursor-not-allowed',
+                  ramoCombo === r.cramo ? 'bg-indigo-700 text-white border-indigo-700' : 'bg-white text-slate-600 border-slate-200 hover:border-indigo-300',
+                )}
+              >
+                {r.xramo} <span className="font-normal opacity-75">· {detalleRamo(r)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {ramoCombo != null && (
         <div className="mt-4">
