@@ -491,7 +491,7 @@ function constanciaRecepcion(doc: PDFDocument, d: DatosPdfRcg, titulos: string[]
   const p = doc.addPage([W, H]);
   const esc = 110 / logo.width;
   p.drawImage(logo, { x: L, y: H - 32 - logo.height * esc, width: 110, height: logo.height * esc });
-  let y = H - 90;
+  let y = H - 32 - logo.height * esc - 24;
   const linea = (t: string, size: number, font: PDFFont, color: RGB = C.texto) => {
     let fila = '';
     for (const w of limpiar(t).split(' ')) {
@@ -531,7 +531,7 @@ function constanciaRecepcion(doc: PDFDocument, d: DatosPdfRcg, titulos: string[]
   campo('Fecha', L + 320, CW - 320);
   y -= 50;
   campo('Por La Mundial de Seguros, C.A. (firma y sello)', L, 300);
-  p.drawText('Constancia de recepcion - forma parte de la cotizacion.', { x: L, y: 30, size: 7, font: regular, color: C.gris });
+  p.drawText('Constancia de recepción - forma parte de la cotización.', { x: L, y: 30, size: 7, font: regular, color: C.gris });
 }
 
 /** Carga logo, sello y plantilla de la solicitud empaquetados por Vite. */
