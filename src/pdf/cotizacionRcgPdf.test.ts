@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
-import { cotizarRcg } from '../tarifas/rcg';
+import { PARAMETROS_RCG, cotizarRcg } from '../tarifas/rcg';
 import { generarPdfRcg } from './cotizacionRcgPdf';
+import { ANEXOS_RCG, CONDICIONADO_GENERAL, documentosRcg } from './condicionadosRcg';
 
 const dir = join(__dirname, 'assets');
 const leer = (f: string) => new Uint8Array(readFileSync(join(dir, f)));
@@ -30,6 +31,49 @@ describe('PDF de cotización RCG', () => {
     if (process.env.PDF_SALIDA) writeFileSync(process.env.PDF_SALIDA, bytes);
     const pdf = await PDFDocument.load(bytes);
     expect(pdf.getPageCount()).toBe(5);
+  });
+
+  it('anexos según coberturas: condicionado + anexos mapeados + moneda extranjera solo en divisa', () => {
+    const sinContrato = documentosRcg(PARAMETROS_RCG.coberturasSinContrato, 'USD');
+    expect(sinContrato[0].id).toBe('condicionado-general-particular-rcg');
+    // 13 coberturas sin contrato: 11 con anexo oficial (alimentos y ascensores no tienen) + moneda extranjera.
+    expect(sinContrato.map((d) => d.id)).toEqual([
+      'condicionado-general-particular-rcg', 'anexo-riesgo-vecinos', 'anexo-riesgo-locativo', 'anexo-danos-por-agua',
+      'anexo-contratistas-independientes', 'anexo-vigilantes-privados', 'anexo-actividades-sociales-eventos-deportivos',
+      'anexo-contaminacion-ambiental', 'anexo-vehiculos-predios-privados', 'anexo-avisos-vallas', 'anexo-incendio-explosion',
+      'anexo-defensa-penal-asistencia-legal', 'anexo-moneda-extranjera',
+    ]);
+    const conContratoBs = documentosRcg(PARAMETROS_RCG.coberturasConContrato, 'Bs.');
+    expect(conContratoBs.map((d) => d.id)).toContain('anexo-transporte-carga-descarga');
+    expect(conContratoBs.map((d) => d.id)).not.toContain('anexo-moneda-extranjera');
+    expect(documentosRcg([], 'Bs.')).toHaveLength(1);
+    // Todos los archivos del catálogo existen.
+    for (const d of [CONDICIONADO_GENERAL, ...ANEXOS_RCG]) expect(existsSync(join(dir, 'condicionados', d.archivo))).toBe(true);
+  });
+
+  it('con condicionados: anexa el condicionado, los anexos y la constancia de recepción', async () => {
+    const cot = cotizarRcg({
+      sucursal: 'Caracas', usuario: 'prueba', correoUsuario: '', asegurado: 'prueba', rif: 'J-1837137', correoDestinatario: 'prueba@gmail.com',
+      intermediario: 'prueba', ubicacion: 'qfb863gfyubi3', moneda: 'USD', clase: 0, indole: 'Oficinas privadas', actividadEspecifica: 'wdefwefwef',
+      esContrato: false, numeroContrato: '', objetoObra: '', coasegurado: '', limite: 5000, tasa: 0.5, condiciones: [],
+    });
+    const docs = documentosRcg(cot.coberturas.map((c) => c.nombre), 'USD');
+    const condicionados = docs.map((d) => ({ titulo: d.titulo, bytes: leer(join('condicionados', d.archivo)) }));
+    let paginasAnexos = 0;
+    for (const c of condicionados) paginasAnexos += (await PDFDocument.load(c.bytes, { ignoreEncryption: true })).getPageCount();
+    const datos = {
+      numero: 'RCG-2026-000064', fecha: new Date(2026, 10, 4), asegurado: 'Comercial Prueba, C.A.', rif: 'J-1837137', moneda: 'USD',
+      indole: 'Oficinas privadas', actividadEspecifica: 'wdefwefwef', correo: 'prueba@gmail.com', intermediario: 'prueba',
+      ubicacion: 'qfb863gfyubi3', esContrato: false, numeroContrato: '', objetoObra: '', coasegurado: '', sucursal: 'Caracas',
+      elaboradoPor: 'prueba', alternativas: cot.alternativas, coberturas: cot.coberturas, deducible: cot.deducible,
+      notaIgtf: cot.notaIgtf, condiciones: cot.condiciones,
+    };
+    const sin = await PDFDocument.load(await generarPdfRcg(datos, assets));
+    const bytes = await generarPdfRcg(datos, { ...assets, condicionados });
+    if (process.env.PDF_SALIDA_CONDICIONADOS) writeFileSync(process.env.PDF_SALIDA_CONDICIONADOS, bytes);
+    const con = await PDFDocument.load(bytes);
+    expect(paginasAnexos).toBeGreaterThan(0);
+    expect(con.getPageCount()).toBe(sin.getPageCount() + paginasAnexos + 1);
   });
 
   it('plan de Sis2000 de otro ramo: cotización sin la solicitud RCG', async () => {

@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
-import { Download, ExternalLink, FileCheck2, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
+import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
+import { documentosRcg, urlDocumento } from '../pdf/condicionadosRcg';
 import { useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
 import { SectionCard } from '../components/ui/SectionCard';
@@ -62,15 +63,19 @@ export function EmisionStep() {
     try {
       // pdf-lib y las imágenes de la solicitud se cargan solo al generar el PDF.
       const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const { cargarCondicionados, documentosRcg } = await import('../pdf/condicionadosRcg');
+      const docs = documentosRcg(cotRcg.coberturas.map((x) => x.nombre), s.rcg.moneda);
+      const assets = await cargarAssetsRcg();
+      assets.condicionados = await cargarCondicionados(docs);
       const bytes = await generarPdfRcg({
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: s.rcg.moneda,
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
         ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
         sucursal: c.sucursal, elaboradoPor: c.emisor, alternativas: cotRcg.alternativas, coberturas: cotRcg.coberturas,
         deducible: cotRcg.deducible, notaIgtf: cotRcg.notaIgtf, condiciones: cotRcg.condiciones, vigenciaDias, mesaTecnica,
-      }, await cargarAssetsRcg());
+      }, assets);
       descargarPdf(bytes, `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`);
-      toast.success('Cotización descargada', `${numero} · 2 páginas de cotización + Solicitud de Seguro.`);
+      toast.success('Cotización descargada', `${numero} · cotización + Solicitud de Seguro + condicionado, ${docs.length - 1} anexos y constancia de recepción.`);
     } catch (e) {
       toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
     } finally {
@@ -159,6 +164,8 @@ export function EmisionStep() {
 
       {rcg ? <ResumenRcg /> : planes ? <ResumenPlan /> : combo ? <ResumenCombo /> : <ResumenRc />}
 
+      {rcg && <CondicionadosRcg coberturas={cotRcg.coberturas.map((x) => x.nombre)} moneda={s.rcg.moneda} />}
+
       {planes ? <EmitirPlan /> : (
       <SectionCard title="Emisión de la póliza" Icon={Lock} statusLabel={combo ? 'Requiere plan' : 'Pendiente'} statusTone="warning"
         description={combo ? 'Un combo armado aquí solo se cotiza: se emite como plan de Sis2000.' : 'La emisión se conecta con Sis2000 al habilitar los planes del producto.'}>
@@ -203,6 +210,27 @@ export function EmisionStep() {
         </>
       )} />
     </div>
+  );
+}
+
+/** Minuta La Mundial 30-oct-2026: condicionado general y particular + anexos de las coberturas contratadas, incluidos en el PDF. */
+function CondicionadosRcg({ coberturas, moneda }: { coberturas: string[]; moneda: string }) {
+  const docs = documentosRcg(coberturas, moneda);
+  return (
+    <SectionCard title="Condicionados y anexos" Icon={FileText} statusLabel={`${docs.length} documentos`} statusTone="success"
+      description="Se incluyen en el PDF de la cotización junto con la constancia de recepción que firma el tomador/asegurado.">
+      <ul className="divide-y divide-slate-100">
+        {docs.map((d, i) => (
+          <li key={d.id} className="flex items-center justify-between gap-3 py-1.5 text-[0.8rem] text-slate-700">
+            <span>{i + 1}. {d.titulo}</span>
+            <span className="flex shrink-0 gap-3">
+              <a href={urlDocumento(d)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-blue-700 hover:underline"><ExternalLink size={12} /> Ver</a>
+              <a href={urlDocumento(d)} download={d.archivo} className="inline-flex items-center gap-1 text-blue-700 hover:underline"><Download size={12} /> Descargar</a>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </SectionCard>
   );
 }
 

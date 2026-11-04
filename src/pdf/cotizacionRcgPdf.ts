@@ -5,6 +5,7 @@
 // pero en texto vectorial con pdf-lib en lugar de capturas html2canvas.
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage, type RGB } from 'pdf-lib';
 import { NOTA_MESA_TECNICA, type AlternativaRcg } from '../tarifas/rcg';
+import type { CondicionadoPdf } from './condicionadosRcg';
 
 export interface DatosPdfRcg {
   numero: string;
@@ -51,6 +52,8 @@ export interface AssetsPdfRcg {
   sello: Uint8Array;
   /** Las 3 páginas de la Solicitud de Seguro RCG (PNG 1020 × 1320, hoja carta). */
   solicitud: Uint8Array[];
+  /** Condicionado General y Particular + anexos de las coberturas contratadas (se anexan al final con constancia de recepción). */
+  condicionados?: CondicionadoPdf[];
 }
 
 const W = 612;
@@ -467,10 +470,68 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
     if (i === 2) dato(p, d.intermediario, 12, 63.5, 92, 8);
   }
 
+  // Minuta La Mundial 30-oct-2026: condicionado, anexos de cobertura y constancia de recepción firmada por el asegurado.
+  if (a.condicionados?.length) {
+    for (const cnd of a.condicionados) {
+      const src = await PDFDocument.load(cnd.bytes, { ignoreEncryption: true });
+      const copiadas = await doc.copyPages(src, src.getPageIndices());
+      copiadas.forEach((pg) => doc.addPage(pg));
+    }
+    constanciaRecepcion(doc, d, a.condicionados.map((x) => x.titulo), regular, bold, logo);
+  }
+
   doc.setTitle(`Cotización ${plan ? plan.cplan : 'RCG'} ${d.numero} - ${limpiar(d.asegurado)}`);
   doc.setAuthor('La Mundial de Seguros, C.A.');
   doc.setSubject(`Cotización de ${producto}`);
   return doc.save();
+}
+
+/** Página "Constancia de recepción": el tomador/asegurado firma que recibió condiciones generales, particulares y anexos. */
+function constanciaRecepcion(doc: PDFDocument, d: DatosPdfRcg, titulos: string[], regular: PDFFont, bold: PDFFont, logo: PDFImage) {
+  const p = doc.addPage([W, H]);
+  const esc = 110 / logo.width;
+  p.drawImage(logo, { x: L, y: H - 32 - logo.height * esc, width: 110, height: logo.height * esc });
+  let y = H - 90;
+  const linea = (t: string, size: number, font: PDFFont, color: RGB = C.texto) => {
+    let fila = '';
+    for (const w of limpiar(t).split(' ')) {
+      const prueba = fila ? `${fila} ${w}` : w;
+      if (font.widthOfTextAtSize(prueba, size) > CW) {
+        p.drawText(fila, { x: L, y, size, font, color });
+        y -= size * 1.4;
+        fila = w;
+      } else fila = prueba;
+    }
+    if (fila) p.drawText(fila, { x: L, y, size, font, color });
+    y -= size * 1.4;
+  };
+  linea('CONSTANCIA DE RECEPCIÓN DE CONDICIONES GENERALES, PARTICULARES Y ANEXOS', 12, bold, C.navy);
+  y -= 6;
+  linea(`Cotización ${d.numero} · Responsabilidad Civil General · ${fechaCorta(d.fecha)}`, 9, regular, C.gris);
+  y -= 10;
+  linea(`Yo, ${d.asegurado}, titular de la C.I./RIF ${d.rif}, en mi condición de tomador/asegurado, declaro que he recibido de `
+    + 'La Mundial de Seguros, C.A. y he leído, en formato digital, las Condiciones Generales y Particulares de la póliza de '
+    + 'Responsabilidad Civil General y los anexos de las coberturas contratadas que se listan a continuación, los cuales forman '
+    + 'parte integrante del contrato de seguro:', 9.5, regular);
+  y -= 6;
+  titulos.forEach((t, i) => linea(`${i + 1}. ${t}`, 9.5, regular, C.tinta));
+  y -= 10;
+  linea('Esta constancia se emite conforme a la normativa vigente sobre entrega de condicionados al tomador y a la minuta de '
+    + 'La Mundial de Seguros del 30-10-2026 sobre inclusión obligatoria de anexos de cobertura.', 8.5, regular, C.gris);
+  y -= 40;
+  const campo = (rotulo: string, x: number, ancho: number, valor = '') => {
+    p.drawLine({ start: { x, y }, end: { x: x + ancho, y }, thickness: 0.8, color: C.tinta });
+    if (valor) p.drawText(limpiar(valor), { x: x + 2, y: y + 4, size: 9, font: regular, color: C.tinta });
+    p.drawText(rotulo, { x, y: y - 11, size: 8, font: bold, color: C.gris });
+  };
+  campo('Nombre o razón social del tomador/asegurado', L, 300, d.asegurado);
+  campo('C.I. / RIF', L + 320, CW - 320, d.rif);
+  y -= 50;
+  campo('Firma del tomador/asegurado', L, 300);
+  campo('Fecha', L + 320, CW - 320);
+  y -= 50;
+  campo('Por La Mundial de Seguros, C.A. (firma y sello)', L, 300);
+  p.drawText('Constancia de recepcion - forma parte de la cotizacion.', { x: L, y: 30, size: 7, font: regular, color: C.gris });
 }
 
 /** Carga logo, sello y plantilla de la solicitud empaquetados por Vite. */
