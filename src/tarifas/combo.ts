@@ -1,10 +1,11 @@
 // Combo de coberturas por ramo (acuerdo con La Mundial, 30-oct-2026): todas las coberturas con tarifa vigente
 // del ramo (GET v1/riesgos-generales/coberturas?cramo), sin depender de un plan. Cada cobertura elegida lleva su
 // suma dentro de sus topes; su prima es suma × tasa / 100 o, si no tiene tasa, la prima fija de Sis2000.
-// Solo se cotiza: para emitirlo, el combo tiene que existir como plan en Sis2000 (Product Builder).
+// Se emite con POST v1/riesgos-generales/emision en modo combo: un plan vigente del ramo hace de contenedor
+// (moneda, cplan y regla de duplicados) y la póliza lleva las coberturas y sumas elegidas; nest-api recalcula la prima.
 import { redondear } from './comun';
-import type { CoberturaTarifa, CotizacionCoberturas } from './coberturas';
-import { errorDeRespuesta } from './planes-rcg';
+import { armarEmisionCoberturas, type CoberturaTarifa, type CotizacionCoberturas, type DatosEmisionCoberturas } from './coberturas';
+import { errorDeRespuesta, type RamoCatalogo } from './planes-rcg';
 
 /** Cobertura del ramo: la de la tarifa del plan sin suma por defecto, con moneda y prima fija. */
 export interface CoberturaRamo extends Omit<CoberturaTarifa, 'msumaplan'> {
@@ -79,5 +80,45 @@ export function cotizarCombo(catalogo: CoberturaRamo[], elegidas: Record<string,
     coberturas,
     errores,
     generales: coberturas.length ? [] : ['Elige al menos una cobertura.'],
+  };
+}
+
+/** Ramos donde Sis2000 exige número de apartamento o unidad (clave asegurado + plan + unidad). */
+export const RAMOS_CON_UNIDAD = [28, 38];
+
+export const pideUnidad = (cramo: number | null) => cramo != null && RAMOS_CON_UNIDAD.includes(cramo);
+
+/** Plan contenedor del combo: un plan vigente del ramo en Sis2000 (valrep/planes/riesgos-generales). */
+export interface PlanContenedor { cplan: string; xplan: string }
+
+/** Planes vigentes del ramo para usar como contenedor, ordenados por código. */
+export function planesContenedor(catalogo: RamoCatalogo[], cramo: number | null): PlanContenedor[] {
+  const ramo = catalogo.find((r) => r.cramo === cramo);
+  return (ramo?.planes ?? [])
+    .map((p) => ({ cplan: p.cplan, xplan: p.xplan }))
+    .sort((a, b) => a.cplan.localeCompare(b.cplan, 'es', { numeric: true }));
+}
+
+/** Lo que falta para poder emitir el combo (vacío = listo). */
+export function faltantesEmisionCombo(x: { cramo: number | null; cplan: string; apartamento: string; valida: boolean; documento: string }): string[] {
+  const f: string[] = [];
+  if (!x.valida) f.push('Revisa las coberturas y sumas en el paso de cotización.');
+  const rif = x.documento.replace(/\D/g, '');
+  if (!rif || rif.length > 9) f.push('Indica el RIF o la cédula del tomador (hasta 9 dígitos) en el paso del tomador.');
+  if (!x.cplan.trim()) f.push('Elige el plan contenedor.');
+  if (pideUnidad(x.cramo) && !(Number(x.apartamento) > 0)) f.push(`En el ramo ${x.cramo} indica el número de apartamento o unidad.`);
+  return f;
+}
+
+/**
+ * Body de POST v1/riesgos-generales/emision en modo combo: las coberturas y sumas del combo con la tarifa de cada una
+ * (la misma que mostró la cotización); `cplan` es el plan contenedor. La prima la recalcula nest-api.
+ */
+export function armarEmisionCombo(x: DatosEmisionCoberturas & { catalogo: CoberturaRamo[] }) {
+  const tarifa = new Map(x.catalogo.map((c) => [c.ccober, c.ctarifa]));
+  return {
+    ...armarEmisionCoberturas(x),
+    modo: 'combo' as const,
+    coberturas: x.cot.coberturas.map((c) => ({ ccober: c.ccober, ...(tarifa.get(c.ccober) ? { ctarifa: tarifa.get(c.ccober) } : {}), suma: c.suma })),
   };
 }

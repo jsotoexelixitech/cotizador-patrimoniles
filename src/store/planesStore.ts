@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  coberturasDeRamo, cotizarPlan, emitirCoberturas, emitirPlan, listarPlanes, listarRamosPatrimoniales, tarificarRamo,
+  coberturasDeRamo, cotizarPlan, emitirCoberturas, emitirPlan, listarPlanes, listarPlanesContenedor, listarRamosPatrimoniales, tarificarRamo,
 } from '../api/patrimonial';
 import type { PlanTarifa } from '../tarifas/coberturas';
 import type { CoberturaRamo } from '../tarifas/combo';
@@ -38,6 +38,11 @@ interface PlanesState {
   /** Opción combo: coberturas con tarifa vigente de cada ramo consultado (riesgos-generales/coberturas). */
   catalogos: Record<number, CatalogoCombo>;
   cargarCatalogo: (cramo: number) => Promise<void>;
+  /** Combo: planes vigentes de todos los ramos patrimoniales, para elegir el plan contenedor de la emisión. */
+  contenedores: RamoCatalogo[] | null;
+  cargandoContenedores: boolean;
+  errorContenedores: string | null;
+  cargarContenedores: () => Promise<void>;
   cargarTarifa: (cramo: number, cplan: string) => Promise<void>;
   cargarRamos: () => Promise<void>;
   cargar: (cramo: number) => Promise<void>;
@@ -51,6 +56,7 @@ const inicial = {
   ramoCotizado: null, planes: [], cargando: false, error: null,
   tarifa: null, cargandoTarifa: false, errorTarifa: null, emitiendo: false, emision: null, catalogos: {},
   ramosCombo: null, ramosComboRespaldo: false, cargandoRamosCombo: false, errorRamosCombo: null,
+  contenedores: null, cargandoContenedores: false, errorContenedores: null,
 };
 
 export const usePlanesStore = create<PlanesState>((set, get) => ({
@@ -65,6 +71,15 @@ export const usePlanesStore = create<PlanesState>((set, get) => ({
       poner({ cargando: false, coberturas: await coberturasDeRamo(cramo), error: null });
     } catch (e) {
       poner({ cargando: false, coberturas: null, error: e instanceof Error ? e.message : String(e) });
+    }
+  },
+  cargarContenedores: async () => {
+    if (get().cargandoContenedores || get().contenedores) return;
+    set({ cargandoContenedores: true, errorContenedores: null });
+    try {
+      set({ contenedores: await listarPlanesContenedor(), cargandoContenedores: false });
+    } catch (e) {
+      set({ cargandoContenedores: false, errorContenedores: e instanceof Error ? e.message : String(e) });
     }
   },
   cargarRamosCombo: async () => {

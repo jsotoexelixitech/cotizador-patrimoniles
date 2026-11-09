@@ -47,8 +47,11 @@ function desenvolver(body: unknown, listo: (d: unknown) => boolean): unknown {
   return d;
 }
 
-/** Respuesta de valrep/planes/riesgos-generales agrupada por ramo, sin los planes excluidos. */
-export function parsearCatalogo(body: unknown): RamoCatalogo[] {
+/**
+ * Respuesta de valrep/planes/riesgos-generales agrupada por ramo, sin los planes excluidos. Con `conRamosExcluidos`
+ * conserva los ramos 20 y 25 (planes contenedores del combo, que se emite en cualquier ramo habilitado en nest-api).
+ */
+export function parsearCatalogo(body: unknown, { conRamosExcluidos = false } = {}): RamoCatalogo[] {
   const error = errorDeRespuesta(body);
   if (error) throw new Error(error);
   const d = desenvolver(body, Array.isArray);
@@ -56,7 +59,7 @@ export function parsearCatalogo(body: unknown): RamoCatalogo[] {
   for (const f of (Array.isArray(d) ? d : []).filter(esObj)) {
     const cramo = Number(f.cramo);
     const cplan = String(f.cplan ?? '').trim();
-    if (!cramo || !cplan || RAMOS_EXCLUIDOS.includes(cramo) || PLANES_EXCLUIDOS[cramo]?.includes(cplan)) continue;
+    if (!cramo || !cplan || (!conRamosExcluidos && RAMOS_EXCLUIDOS.includes(cramo)) || PLANES_EXCLUIDOS[cramo]?.includes(cplan)) continue;
     const ramo = ramos.get(cramo) ?? { cramo, xramo: String(f.xramo ?? '').trim() || `Ramo ${cramo}`, planes: [] };
     ramo.planes.push({
       cramo, xramo: ramo.xramo, cplan, xplan: String(f.xplan ?? '').trim() || cplan,

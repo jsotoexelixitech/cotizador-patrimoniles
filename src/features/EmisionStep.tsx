@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
 import { documentosRcg, urlDocumento } from '../pdf/condicionadosRcg';
 import { useParametrosStore } from '../store/parametrosStore';
@@ -20,9 +20,9 @@ import { esPersonaNatural } from './TomadorStep';
 import { armarEmisionCoberturas } from '../tarifas/coberturas';
 import { useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
-
-/** El combo no tiene ruta de emisión: se emite como plan de Sis2000 creado en el Product Builder. */
-const NOTA_EMISION_COMBO = 'Para emitir este combo debe existir como plan en Sis2000: créalo en el Product Builder (Combos de coberturas) y emítelo desde Planes Sis2000.';
+import { Field, Input, Select } from '../components/ui/FormField';
+import { armarEmisionCombo, faltantesEmisionCombo, pideUnidad, planesContenedor } from '../tarifas/combo';
+import type { ResultadoEmision } from '../tarifas/planes-rcg';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -166,18 +166,16 @@ export function EmisionStep() {
 
       {rcg && <CondicionadosRcg coberturas={cotRcg.coberturas.map((x) => x.nombre)} moneda={s.rcg.moneda} />}
 
-      {planes ? <EmitirPlan /> : (
-      <SectionCard title="Emisión de la póliza" Icon={Lock} statusLabel={combo ? 'Requiere plan' : 'Pendiente'} statusTone="warning"
-        description={combo ? 'Un combo armado aquí solo se cotiza: se emite como plan de Sis2000.' : 'La emisión se conecta con Sis2000 al habilitar los planes del producto.'}>
+      {planes ? <EmitirPlan /> : combo ? <EmitirCombo /> : (
+      <SectionCard title="Emisión de la póliza" Icon={Lock} statusLabel="Pendiente" statusTone="warning"
+        description="La emisión se conecta con Sis2000 al habilitar los planes del producto.">
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="primary" size="lg" disabled title={combo ? 'El combo debe existir como plan en Sis2000' : 'Pendiente de habilitar en Sis2000'}>
+          <Button variant="primary" size="lg" disabled title="Pendiente de habilitar en Sis2000">
             <FileCheck2 size={15} />
             Emitir póliza
           </Button>
           <p className="text-[0.78rem] text-slate-500 max-w-md">
-            {combo
-              ? NOTA_EMISION_COMBO
-              : rcg
+            {rcg
               ? 'RCG: ramo 28 · producto 89 (planes PLANI, PLANII y PLAN3). Falta que La Mundial habilite los planes del productor en Sis2000.'
               : 'RCP / RCE: falta confirmar con La Mundial el ramo y producto en Sis2000.'}
           </p>
@@ -313,22 +311,7 @@ function EmitirPlan() {
     if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
   };
 
-  if (emision) {
-    return (
-      <SectionCard title="Póliza emitida en Sis2000 QA" Icon={FileCheck2} statusLabel="Emitida" statusTone="success">
-        <div className="grid sm:grid-cols-3 gap-4">
-          <Dato label="N.º de póliza">{emision.cnpoliza}</Dato>
-          <Dato label="N.º de recibo">{emision.cnrecibo}</Dato>
-          <Dato label="Documento">
-            {emision.urlpoliza
-              ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={emision.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a>
-              : '—'}
-          </Dato>
-        </div>
-        <p className="text-[0.72rem] text-slate-500 mt-3">Recibo pendiente de cobro en Sis2000.</p>
-      </SectionCard>
-    );
-  }
+  if (emision) return <PolizaEmitida emision={emision} />;
 
   return (
     <SectionCard title="Emitir en Sis2000 QA" description={cobCot ? 'Cobertura por cobertura (nest-api riesgos-generales/emision).' : 'Partner patrimonial de nest-api (el mismo de Emisión).'} Icon={habilitada ? FileCheck2 : Lock}
@@ -352,6 +335,105 @@ function EmitirPlan() {
             {habilitada
               ? 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. Antes de producción debe pasar por Pagos.'
               : 'Para probar: VITE_RCG_PLANES_EMITIR=1 en .env.local (con NEST_API_URL de QA) y reiniciar npm run dev.'}
+          </p>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
+function PolizaEmitida({ emision }: { emision: ResultadoEmision }) {
+  return (
+    <SectionCard title="Póliza emitida en Sis2000 QA" Icon={FileCheck2} statusLabel="Emitida" statusTone="success">
+      <div className="grid sm:grid-cols-3 gap-4">
+        <Dato label="N.º de póliza">{emision.cnpoliza}</Dato>
+        <Dato label="N.º de recibo">{emision.cnrecibo}</Dato>
+        <Dato label="Documento">
+          {emision.urlpoliza
+            ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={emision.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a>
+            : '—'}
+        </Dato>
+      </div>
+      <p className="text-[0.72rem] text-slate-500 mt-3">Recibo pendiente de cobro en Sis2000.</p>
+    </SectionCard>
+  );
+}
+
+/**
+ * Combo: se emite con un plan vigente del ramo como contenedor (moneda, cplan y regla de duplicados de Sis2000) y las
+ * coberturas y sumas elegidas (nest-api riesgos-generales/emision, modo combo). Solo QA y con VITE_RCG_PLANES_EMITIR=1.
+ */
+function EmitirCombo() {
+  const s = useCotizacionStore();
+  const setComun = useCotizacionStore((x) => x.setComun);
+  const r = useCotizacionCombo();
+  const xramo = useNombreRamo(r?.cramo ?? null);
+  const { emitiendo, emision, error, emitir, contenedores, cargandoContenedores, errorContenedores, cargarContenedores } = usePlanesStore();
+  const [cplan, setCplan] = useState('');
+  const [acepta, setAcepta] = useState(false);
+  const habilitada = import.meta.env.VITE_RCG_PLANES_EMITIR === '1';
+  const cramo = r?.cramo ?? null;
+  const planesRamo = planesContenedor(contenedores ?? [], cramo);
+  const { comun: c, rcg } = s;
+  const faltan = faltantesEmisionCombo({ cramo, cplan, apartamento: c.apartamento, valida: !!r?.valida, documento: c.documento });
+
+  useEffect(() => { void cargarContenedores(); }, [cargarContenedores]);
+  // Un solo plan vigente: se elige solo. Al cambiar de ramo se limpia la elección.
+  const unico = planesRamo.length === 1 ? planesRamo[0].cplan : '';
+  useEffect(() => { setCplan(unico); }, [cramo, unico]);
+
+  if (emision) return <PolizaEmitida emision={emision} />;
+  if (!r) return null;
+
+  const emitirAhora = async () => {
+    const plan = planesRamo.find((p) => p.cplan === cplan);
+    const aviso = `Se emitirá en Sis2000 QA el combo de ${xramo} con el plan contenedor ${plan?.xplan ?? cplan} (${cplan}) `
+      + `por ${r.moneda} ${importe(r.cot.prima_total)} (nest-api recalcula la prima) a nombre de ${c.asegurado}. El recibo queda pendiente de cobro. ¿Continuar?`;
+    if (!window.confirm(aviso)) return;
+    const em = await emitir(armarEmisionCombo({
+      cramo: r.cramo, cplan, cot: r.cot, catalogo: r.catalogo, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
+      apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
+      bien: rcg.actividadEspecifica || c.asegurado, apartamento: pideUnidad(r.cramo) ? Number(c.apartamento) || undefined : undefined,
+      cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+    }), 'coberturas');
+    if (em) toast.success('Póliza emitida en QA', `${em.cnpoliza} · recibo ${em.cnrecibo || '—'}`);
+  };
+
+  return (
+    <SectionCard title="Emitir el combo en Sis2000 QA" Icon={habilitada ? FileCheck2 : Lock}
+      description="Un plan vigente del ramo hace de contenedor; la póliza lleva las coberturas y sumas del combo (nest-api riesgos-generales/emision)."
+      statusLabel={habilitada ? 'Solo QA' : 'Deshabilitada'} statusTone="warning">
+      <div className="space-y-3">
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Plan contenedor" full
+            hint="Aporta la moneda y el código de plan de la póliza. Sis2000 no permite dos pólizas vigentes del mismo asegurado y plan."
+            error={errorContenedores ?? (contenedores && !planesRamo.length ? `El ramo ${xramo} no tiene planes vigentes en Sis2000: hay que crear uno para poder emitir.` : undefined)}>
+            <Select value={cplan} onChange={(e) => setCplan(e.target.value)} disabled={cargandoContenedores || !planesRamo.length}>
+              <option value="">{cargandoContenedores ? 'Cargando planes…' : 'Elige el plan'}</option>
+              {planesRamo.map((p) => <option key={p.cplan} value={p.cplan}>{p.cplan} · {p.xplan}</option>)}
+            </Select>
+          </Field>
+          {pideUnidad(cramo) && (
+            <Field label="N.º de apartamento / unidad" hint="Obligatorio en este ramo: Sis2000 identifica la póliza por cédula + plan + unidad.">
+              <Input inputMode="numeric" maxLength={6} value={c.apartamento} onChange={(e) => setComun({ apartamento: e.target.value.replace(/\D/g, '') })} placeholder="Ej. 52" />
+            </Field>
+          )}
+        </div>
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} />
+          El tomador declara que la información es veraz y acepta los Términos y Condiciones.
+        </label>
+        {error && <Aviso tono="error">{error}</Aviso>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="primary" size="lg" disabled={!habilitada || !acepta || faltan.length > 0 || emitiendo} onClick={() => void emitirAhora()}
+            title={faltan.join(' ') || undefined}>
+            {emitiendo ? <Loader2 size={15} className="animate-spin" /> : <FileCheck2 size={15} />}
+            {emitiendo ? 'Emitiendo…' : 'Emitir en Sis2000 QA'}
+          </Button>
+          <p className="text-[0.78rem] text-slate-500 max-w-md">
+            {!habilitada
+              ? 'Para probar: VITE_RCG_PLANES_EMITIR=1 en .env.local (con NEST_API_URL de QA) y reiniciar npm run dev.'
+              : faltan.length ? faltan.join(' ') : 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. El ramo debe estar habilitado en nest-api (RIESGOS_GENERALES_RAMOS_EMISION).'}
           </p>
         </div>
       </div>

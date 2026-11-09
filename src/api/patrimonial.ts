@@ -50,6 +50,10 @@ const post = (ruta: 'quote' | 'emit', body: unknown) =>
 export const listarPlanes = async (): Promise<RamoCatalogo[]> =>
   parsearCatalogo(await pedir('/nest/api/v1/valrep/planes/riesgos-generales', { method: 'GET' }, 'catalogo'));
 
+/** Combo: planes vigentes de todos los ramos patrimoniales (incluidos 20 y 25), para elegir el plan contenedor. */
+export const listarPlanesContenedor = async (): Promise<RamoCatalogo[]> =>
+  parsearCatalogo(await pedir('/nest/api/v1/valrep/planes/riesgos-generales', { method: 'GET' }, 'catalogo'), { conRamosExcluidos: true });
+
 /** spCalculoRiesgoGeneral: solo ramo, plan y frecuencia; suma y prima salen de maplantar. */
 export const cotizarPlan = (cramo: number, cplan: string) =>
   post('quote', { cramo, cplan, cuotas: 1, ifrecuencia: 'A', pdescuento: 0, precargo: 0 });
@@ -76,6 +80,9 @@ export async function coberturasDeRamo(cramo: number): Promise<CoberturaRamo[]> 
   return parsearCoberturasRamo(await pedir(`/nest/api/v1/riesgos-generales/coberturas?cramo=${cramo}`, { method: 'GET' }, 'coberturas'));
 }
 
-/** Emisión con las coberturas y sumas elegidas; nest-api recalcula la prima antes de emitir. */
+/**
+ * Emisión con las coberturas y sumas elegidas (plan o combo con plan contenedor); nest-api recalcula la prima y valida
+ * ramo, plan y tarifas antes de emitir. Sus mensajes de error se muestran tal cual.
+ */
 export const emitirCoberturas = async (payload: unknown): Promise<ResultadoEmision> =>
   parsearEmision(await pedir('/nest/api/v1/riesgos-generales/emision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'emit'));

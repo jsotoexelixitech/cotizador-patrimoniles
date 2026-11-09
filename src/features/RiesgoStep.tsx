@@ -37,7 +37,7 @@ function RiesgoPlan() {
   const cramo = useCotizacionStore((s) => (combo ? s.ramoCombo : s.ramoSel));
   const apartamento = useCotizacionStore((s) => s.comun.apartamento);
   const setComun = useCotizacionStore((s) => s.setComun);
-  // Hogar (38): Sis2000 identifica la póliza por cédula + plan + apartamento. El combo no emite: no lo pide.
+  // Hogar (38): Sis2000 identifica la póliza por cédula + plan + apartamento. El combo lo pide al emitir (ramos 28 y 38).
   const pideApto = !combo && cramo === 38;
   const errorApto = intentoApto(pideApto, apartamento);
   const xramo = usePlanesStore((s) => (s.ramos.find((r) => r.cramo === cramo) ?? s.ramosCombo?.find((r) => r.cramo === cramo))?.xramo);

@@ -15,7 +15,7 @@ type Errores = Partial<Record<string, string>>;
 /** Mismas reglas que los motores (rcg.ts / rcp-rce.ts) para los datos de este paso. */
 function validar(s: CotizacionState): Errores {
   const { comun: c, contrato: k, producto } = s;
-  // Los planes Sis2000 y el combo siguen las reglas del RCG; el combo no emite, así que no pide los datos de Sis2000.
+  // Los planes Sis2000 y el combo siguen las reglas del RCG; el combo pide el RIF y la unidad recién al emitir (EmisionStep).
   const rcg = producto !== 'rc';
   const e: Errores = {};
   if (!c.asegurado.trim()) e.asegurado = 'Indica el tomador / asegurado.';
