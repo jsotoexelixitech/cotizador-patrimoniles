@@ -23,6 +23,8 @@ export interface CoberturaCotizada {
   ccober: string; nombre: string; tasa: number; suma: number; prima: number;
   /** Combo: cobertura sin tarifa en Sis2000 cuya tasa o prima escribió Técnico (vista técnica). */
   tecnica?: boolean;
+  /** Combo de los ramos 27/28/37: prima con la tarifa oficial del cotizador (la básica la lleva, las demás en 0). */
+  oficial?: boolean;
 }
 export interface CotizacionCoberturas {
   suma_asegurada: number; prima_total: number; coberturas: CoberturaCotizada[];

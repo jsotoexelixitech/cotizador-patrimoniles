@@ -110,7 +110,7 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
 
 export const rifCompleto = (c: CotizacionState['comun']) => (c.documento ? `${c.tipoDoc}-${c.documento}` : '');
 
-function solicitudRcg(s: CotizacionState): SolicitudRcg {
+export function solicitudRcg(s: Pick<CotizacionState, 'comun' | 'contrato' | 'rcg'>): SolicitudRcg {
   const { comun: c, contrato: k, rcg: r } = s;
   return {
     sucursal: c.sucursal, usuario: c.emisor, correoUsuario: c.correoEmisor, asegurado: c.asegurado, rif: rifCompleto(c),
@@ -130,7 +130,7 @@ export const claseRc = (rc: CotizacionState['rc']): number | null => {
   return t === '' ? null : Number(t);
 };
 
-function solicitudRc(s: CotizacionState): SolicitudRc {
+export function solicitudRc(s: Pick<CotizacionState, 'comun' | 'contrato' | 'rc'>): SolicitudRc {
   const { comun: c, contrato: k, rc } = s;
   return {
     modo: rc.modo, moneda: rc.moneda, tasaBcv: numeroONulo(rc.tasaBcv), base: rc.base, monto: numeroONulo(rc.monto),

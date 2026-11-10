@@ -365,8 +365,9 @@ function EmitirCombo({ numero }: { numero: string }) {
   const cramo = r?.cramo ?? null;
   const planesRamo = planesContenedor(contenedores ?? [], cramo);
   const { comun: c, rcg } = s;
-  // Con primas de Técnico (vista técnica) se emite con prima informada: nest-api modo cotizador, no recalcula.
-  const informada = !!r && conPrimaTecnica(r.cot);
+  // Ramos 27/28/37 (tarifa oficial del cotizador) o primas de Técnico: prima informada, nest-api modo cotizador, no recalcula.
+  const oficial = r?.oficial ?? null;
+  const informada = !!r && (!!oficial || conPrimaTecnica(r.cot));
   const faltan = faltantesEmisionCombo({
     cramo, cplan, apartamento: c.apartamento, valida: !!r?.valida, documento: c.documento,
     sinTarifa: r ? coberturasSinTarifa(r.catalogo, r.cot) : [],
@@ -384,7 +385,7 @@ function EmitirCombo({ numero }: { numero: string }) {
   const emitirAhora = async () => {
     const plan = planesRamo.find((p) => p.cplan === cplan);
     const aviso = `Se emitirá en Sis2000 QA el combo de ${xramo} con el plan contenedor ${plan?.xplan ?? cplan} (${cplan}) `
-      + `por ${r.moneda} ${importe(r.cot.prima_total)} (${informada ? 'prima con la tarifa de Técnico; nest-api no la recalcula' : 'nest-api recalcula la prima'}) a nombre de ${c.asegurado}. El recibo queda pendiente de cobro. ¿Continuar?`;
+      + `por ${r.moneda} ${importe(r.cot.prima_total)} (${oficial ? 'prima con la tarifa oficial del cotizador; nest-api no la recalcula' : informada ? 'prima con la tarifa de Técnico; nest-api no la recalcula' : 'nest-api recalcula la prima'}) a nombre de ${c.asegurado}. El recibo queda pendiente de cobro. ¿Continuar?`;
     if (!window.confirm(aviso)) return;
     const datos = {
       cramo: r.cramo, cplan, cot: r.cot, catalogo: r.catalogo, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
@@ -392,7 +393,7 @@ function EmitirCombo({ numero }: { numero: string }) {
       bien: rcg.actividadEspecifica || c.asegurado, apartamento: pideUnidad(r.cramo) ? Number(c.apartamento) || undefined : undefined,
       cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
     };
-    const em = await emitir(informada ? armarEmisionComboInformada({ ...datos, ncotizacion: numero.replace(/^RCG/, 'COMBO') }) : armarEmisionCombo(datos), 'coberturas');
+    const em = await emitir(informada ? armarEmisionComboInformada({ ...datos, ncotizacion: numero.replace(/^RCG/, 'COMBO'), ...(oficial ? { cotizador: oficial.cotizador } : {}) }) : armarEmisionCombo(datos), 'coberturas');
     if (em) toast.success('Póliza emitida en QA', `${em.cnpoliza} · recibo ${em.cnrecibo || '—'}`);
   };
 
@@ -431,7 +432,7 @@ function EmitirCombo({ numero }: { numero: string }) {
             {!habilitada
               ? 'Para probar: VITE_RCG_PLANES_EMITIR=1 en .env.local (con NEST_API_URL de QA) y reiniciar npm run dev.'
               : faltan.length ? faltan.join(' ') : informada
-                ? 'Opción de prueba con la tarifa de Técnico: la póliza queda con el recibo pendiente de cobro. En nest-api: RIESGOS_GENERALES_EMISION_COTIZADOR=true, el ramo en RIESGOS_GENERALES_COTIZADOR_RAMOS y la key con emissions:riesgos-generales-prima.'
+                ? `Opción de prueba con la ${oficial ? `tarifa oficial del cotizador ${oficial.cotizador.toUpperCase()}` : 'tarifa de Técnico'}: la póliza queda con el recibo pendiente de cobro. En nest-api: RIESGOS_GENERALES_EMISION_COTIZADOR=true, el ramo en RIESGOS_GENERALES_COTIZADOR_RAMOS y la key con emissions:riesgos-generales-prima.`
                 : 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. El ramo debe estar habilitado en nest-api (RIESGOS_GENERALES_RAMOS_EMISION).'}
           </p>
         </div>

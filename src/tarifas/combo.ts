@@ -54,7 +54,8 @@ export function coberturasSinTarifa(catalogo: CoberturaRamo[], cot: CotizacionCo
   const porCob = new Map(catalogo.map((c) => [c.ccober, c]));
   return cot.coberturas.filter((c) => {
     const t = porCob.get(c.ccober);
-    return t ? sinTarifa(t) && !(c.tecnica && c.prima > 0) : false;
+    // Con tarifa oficial del cotizador (27/28/37) no hace falta Técnico.
+    return t && !c.oficial ? sinTarifa(t) && !(c.tecnica && c.prima > 0) : false;
   }).map((c) => c.nombre);
 }
 
@@ -82,23 +83,49 @@ export const monedaCombo = (catalogo: CoberturaRamo[]) => {
 const fmt = (n: number) => n.toLocaleString('es-VE');
 
 /**
+ * Tarifa oficial del cotizador de Google para el combo (ramos 27/28/37, ver combo-rc.ts): la prima va en la
+ * cobertura básica de la moneda elegida y las demás coberturas marcadas van con prima 0.
+ */
+export interface TarifaComboOficial {
+  /** ccober de la básica en la moneda de la cotización; entra siempre. */
+  basica: string | null;
+  /** Prima del motor; null = faltan datos o tienen errores (ver `errores`). */
+  prima: number | null;
+  /** Errores de los datos de tarifa (clase, tasa, nómina…): impiden continuar. */
+  errores: string[];
+  /** Error de la suma de la básica como límite del motor (RCG: entre 5.000 y 1.000.000). */
+  errorSuma?: string;
+  tasa?: number | null;
+}
+
+/**
  * Cotiza el combo: `elegidas` = ccober → suma escrita. Las obligatorias entran siempre (sin suma, con error).
  * Prima = suma × tasa / 100 o la prima fija; ninguna adicional puede superar la suma de la básica ('1').
+ * Con `oficial` (ramos 27/28/37) la prima es la del cotizador, entera en su básica, y no se usa matarifa_d.
  */
 export function cotizarCombo(
   catalogo: CoberturaRamo[], elegidas: Record<string, string>,
   /** Solo con la vista técnica: tasa o prima de Técnico para las coberturas sin tarifa (ccober → valores). */
   tecnico?: Record<string, PrimaTecnica>,
+  oficial?: TarifaComboOficial | null,
 ): CotizacionCoberturas {
   const errores: Record<string, string> = {};
+  const codBasica = oficial ? oficial.basica : '1';
   const coberturas = catalogo
-    .filter((c) => c.obligatoria || elegidas[c.ccober] !== undefined)
+    .filter((c) => c.obligatoria || elegidas[c.ccober] !== undefined || (!!oficial && c.ccober === oficial.basica))
     .map((c) => {
       const n = Number(elegidas[c.ccober] ?? '');
       const suma = Number.isFinite(n) ? redondear(n) : 0;
       if (!(suma > 0)) errores[c.ccober] = 'La suma debe ser mayor a 0.';
-      else if (c.msumamin > 0 && suma < c.msumamin) errores[c.ccober] = `Mínimo ${fmt(c.msumamin)}.`;
-      else if (c.msumamax > 0 && suma > c.msumamax) errores[c.ccober] = `Máximo ${fmt(c.msumamax)}.`;
+      else if (c.msumamin > 0 && suma < c.msumamin && !oficial) errores[c.ccober] = `Mínimo ${fmt(c.msumamin)}.`;
+      else if (c.msumamax > 0 && suma > c.msumamax && !oficial) errores[c.ccober] = `Máximo ${fmt(c.msumamax)}.`;
+      if (oficial) {
+        // Topes de matarifa_d no aplican (como en emision-rc): manda el motor del cotizador.
+        const esBasica = c.ccober === oficial.basica;
+        if (esBasica && suma > 0 && oficial.errorSuma) errores[c.ccober] = oficial.errorSuma;
+        const prima = esBasica && suma > 0 && oficial.prima != null ? oficial.prima : 0;
+        return { ccober: c.ccober, nombre: c.nombre, tasa: esBasica ? oficial.tasa ?? 0 : 0, suma, prima, oficial: true };
+      }
       // Sin tarifa en Sis2000: la tarifa la aplica Técnico (tasa o prima escrita en la vista técnica).
       const tec = tecnico && sinTarifa(c) ? primaTecnica(tecnico[c.ccober], suma > 0 ? suma : 0) : null;
       if (tec !== null && Number.isNaN(tec) && !errores[c.ccober]) errores[c.ccober] = 'La tasa o la prima de Técnico no es válida.';
@@ -109,18 +136,23 @@ export function cotizarCombo(
       const prima = !(suma > 0) ? 0 : c.pprima > 0 ? redondear((suma * c.pprima) / 100) : c.mprima;
       return { ccober: c.ccober, nombre: c.nombre, tasa: c.pprima, suma, prima };
     });
-  const basica = coberturas.find((c) => c.ccober === '1');
+  const basica = coberturas.find((c) => c.ccober === codBasica);
   if (basica && basica.suma > 0) {
     for (const c of coberturas) {
       if (c !== basica && !errores[c.ccober] && c.suma > basica.suma) errores[c.ccober] = `No puede superar la suma de la básica (${fmt(basica.suma)}).`;
     }
+  }
+  const generales = coberturas.length ? [] : ['Elige al menos una cobertura.'];
+  if (oficial) {
+    if (!basica) generales.push(`La cobertura básica${oficial.basica ? ` (${oficial.basica})` : ''} de esa moneda no está entre las coberturas del ramo.`);
+    generales.push(...oficial.errores);
   }
   return {
     suma_asegurada: basica ? basica.suma : Math.max(0, ...coberturas.map((c) => c.suma)),
     prima_total: redondear(coberturas.reduce((s, c) => s + c.prima, 0)),
     coberturas,
     errores,
-    generales: coberturas.length ? [] : ['Elige al menos una cobertura.'],
+    generales,
   };
 }
 
@@ -153,7 +185,7 @@ export function faltantesEmisionCombo(x: {
   if (x.sinTarifa?.length) {
     const n = x.sinTarifa;
     const lista = n.length > 5 ? `${n.slice(0, 5).join(', ')} y ${n.length - 5} más` : n.join(', ');
-    f.push(`La tarifa la aplica Técnico: falta la tasa o la prima de ${lista}. Escríbela con la vista técnica (Parámetros) para poder emitir.`);
+    f.push(`Falta la tarifa de Técnico para ${lista}. Para emitir, Técnico la carga en el «Tarificador (Configuración de tarifas)»; al guardarla se aplica sola. Con la vista técnica también se puede escribir aquí la tasa o la prima.`);
   }
   if (x.primaTotal !== undefined && !(x.primaTotal > 0)) f.push('La prima total del combo es 0: no se puede emitir una póliza sin prima.');
   const rif = x.documento.replace(/\D/g, '');
@@ -180,12 +212,16 @@ export function armarEmisionCombo(x: DatosEmisionCoberturas & { catalogo: Cobert
  * Combo con primas de Técnico: body en `modo: cotizador` con la suma y la prima de cada cobertura (las de tarifa de
  * Sis2000 con la misma regla de la cotización) y la prima total = suma de las primas. nest-api valida y no recalcula.
  */
-export function armarEmisionComboInformada(x: DatosEmisionCoberturas & { catalogo: CoberturaRamo[]; ncotizacion: string }) {
+export function armarEmisionComboInformada(x: DatosEmisionCoberturas & {
+  catalogo: CoberturaRamo[]; ncotizacion: string;
+  /** Ramos 27/28/37 con la tarifa oficial: el cotizador de origen (la prima va en la básica). Si no, 'combo'. */
+  cotizador?: 'rcg' | 'rcp' | 'rce';
+}) {
   const tarifa = new Map(x.catalogo.map((c) => [c.ccober, c.ctarifa]));
   return {
     ...armarEmisionCoberturas(x),
     modo: 'cotizador' as const,
-    cotizador: 'combo' as const,
+    cotizador: x.cotizador ?? ('combo' as const),
     ncotizacion: x.ncotizacion.trim().slice(0, 40),
     prima_total: redondear(x.cot.coberturas.reduce((s, c) => s + c.prima, 0)),
     coberturas: x.cot.coberturas.map((c) => ({

@@ -9,7 +9,7 @@ import { Button } from '../components/ui/Button';
 import { cn } from '../lib/utils';
 import { importe, porcentaje } from '../tarifas/comun';
 import { MONEDAS_RCG, type MonedaRcg } from '../tarifas/rcg';
-import { COBERTURAS_BASICAS, NOMBRES, opcionalesDe, type IdOpcion, type ParametrosRc } from '../tarifas/rcp-rce';
+import { COBERTURAS_BASICAS, NOMBRES, OPCIONES, opcionalesDe, type IdOpcion, type ParametrosRc } from '../tarifas/rcp-rce';
 import { useParametrosStore } from '../store/parametrosStore';
 import { useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, useMesaTecnica, type K } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
@@ -18,8 +18,9 @@ import { sumaDe } from '../tarifas/coberturas';
 import { esRamoCoberturas, useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
 import { coberturasSinTarifa, sinTarifa, type PrimaTecnica } from '../tarifas/combo';
+import { NOMBRE_COTIZADOR, type TarifaOficial } from '../tarifas/combo-rc';
 import { toast } from '../store/toastStore';
-import { AvisoMesaTecnica } from './RiesgoStep';
+import { AvisoMesaTecnica, CamposClaseRc, CamposClaseRcg, CamposNominaRc } from './RiesgoStep';
 
 export function CotizacionStep() {
   const producto = useCotizacionStore((s) => s.producto);
@@ -376,7 +377,7 @@ function CotizacionCombo() {
   return (
     <div className="space-y-5">
       {cramo == null ? <Aviso tono="error">No hay ramo elegido: vuelve al paso de producto.</Aviso>
-        : r ? <TablaCombo r={r} intento={intento} />
+        : r ? <>{r.oficial && <DatosTarifaOficial oficial={r.oficial} intento={intento} />}<TablaCombo r={r} intento={intento} /></>
         : error ? (
           <div className="space-y-3">
             <Aviso tono="error">{error}</Aviso>
@@ -409,21 +410,24 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
   const tecnico = useCotizacionStore((s) => s.tecnicoCombo[r.cramo]) ?? SIN_TECNICO;
   const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
   const xramo = useNombreRamo(r.cramo);
-  const { cramo, catalogo, elegidas, cot, moneda } = r;
+  const { cramo, catalogo, elegidas, cot, moneda, oficial } = r;
   const m = (n: number) => `${moneda} ${importe(n)}`;
   const porCob = new Map(cot.coberturas.map((c) => [c.ccober, c]));
   const alternar = (ccober: string, v: boolean) =>
     setCombo(cramo, v ? { ...elegidas, [ccober]: '' } : Object.fromEntries(Object.entries(elegidas).filter(([k]) => k !== ccober)));
 
   if (!catalogo.length) return <Aviso>{xramo} no tiene coberturas con tarifa vigente en Sis2000.</Aviso>;
-  // Sin tasa ni prima fija en Sis2000 a propósito: la tarifa la aplica Técnico. Con la vista técnica se elige la
-  // cobertura y se escribe su tasa o su prima; sin ella, las opcionales no se pueden elegir y el combo no se emite.
-  const totalSinTarifa = catalogo.filter(sinTarifa).length;
+  // Ramos 27/28/37: tarifa oficial del cotizador (la prima va en la básica). Los demás: tasa de Sis2000 o de Técnico.
+  // Cualquier cobertura se puede marcar; sin la tarifa de Técnico se cotiza, pero no se emite.
+  const fuente = oficial ? `Tarifa oficial (cotizador ${NOMBRE_COTIZADOR[oficial.cotizador]})` : '';
+  const totalSinTarifa = oficial ? 0 : catalogo.filter(sinTarifa).length;
   const incluidasSinTarifa = coberturasSinTarifa(catalogo, cot);
   return (
     <SectionCard title={`Arma el combo · ${xramo}`} Icon={ListChecks} statusLabel={`Ramo ${cramo}`}
-      description={vistaTecnica
-        ? 'Marca las coberturas y escribe su suma. La prima de cada una es su suma × su tasa de Sis2000, o su prima fija; en las que aplica Técnico, escribe la tasa o la prima.'
+      description={oficial
+        ? `Marca las coberturas y escribe su suma. La prima sale de la tarifa oficial del cotizador ${NOMBRE_COTIZADOR[oficial.cotizador]} y va en la cobertura básica; las demás van incluidas con prima 0.`
+        : vistaTecnica
+        ? 'Marca las coberturas y escribe su suma. La prima de cada una es su suma × la tasa cargada por Técnico en el Tarificador, o su prima fija; si aún no la tiene, puedes escribir aquí la tasa o la prima como respaldo.'
         : 'Marca las coberturas y escribe su suma asegurada. Se muestra solo la prima total del combo.'}>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-[0.78rem]">
@@ -438,32 +442,39 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
           <tbody>
             {catalogo.map((c) => {
               const marcada = c.obligatoria || elegidas[c.ccober] !== undefined;
+              const esBasicaOficial = !!oficial && c.ccober === oficial.basica;
+              const activa = marcada || esBasicaOficial;
               const valor = elegidas[c.ccober] ?? '';
               const x = porCob.get(c.ccober);
               // El error se ve al escribir la suma o al intentar continuar; antes, solo los topes.
-              const err = marcada && (intento || valor !== '') ? cot.errores[c.ccober] : undefined;
-              const limites = topes(c.msumamin, c.msumamax);
-              const sinTar = sinTarifa(c);
-              // Una opcional sin tarifa no se puede marcar (sí desmarcar si ya estaba elegida).
-              const bloqueada = c.obligatoria || (sinTar && !marcada && !vistaTecnica);
+              const err = activa && (intento || valor !== '') ? cot.errores[c.ccober] : undefined;
+              // Con tarifa oficial no aplican los topes de Sis2000 (manda el motor del cotizador).
+              const limites = oficial ? '' : topes(c.msumamin, c.msumamax);
+              const sinTar = !oficial && sinTarifa(c);
+              // Solo la básica y las obligatorias no se desmarcan; cualquier otra se puede marcar, con o sin tarifa.
+              const bloqueada = c.obligatoria || esBasicaOficial;
               const tec = tecnico[c.ccober] ?? {};
               return (
-                <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400', sinTar && 'bg-amber-50/60')}>
+                <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !activa && 'text-slate-400', esBasicaOficial && 'bg-indigo-50/50')}>
                   <td className="px-3 py-2">
-                    <label className={cn('flex items-center gap-2', bloqueada ? 'cursor-default' : 'cursor-pointer')}
-                      title={sinTar ? 'Sin tarifa en Sis2000: la aplica Técnico. Con la vista técnica (Parámetros) se escribe la tasa o la prima.' : undefined}>
-                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={bloqueada} onChange={(e) => alternar(c.ccober, e.target.checked)} />
-                      <span className={marcada ? 'text-slate-700' : ''}>{c.nombre}{c.obligatoria ? ' · obligatoria' : ''}</span>
+                    <label className={cn('flex items-center gap-2 flex-wrap', bloqueada ? 'cursor-default' : 'cursor-pointer')}
+                      title={sinTar ? 'Sin tarifa todavía: Técnico la carga en el «Tarificador (Configuración de tarifas)» y se aplica sola. Se puede cotizar; para emitir hace falta la tarifa.' : undefined}>
+                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={activa} disabled={bloqueada} onChange={(e) => alternar(c.ccober, e.target.checked)} />
+                      <span className={activa ? 'text-slate-700' : ''}>{c.nombre}{esBasicaOficial ? ' · básica' : c.obligatoria ? ' · obligatoria' : ''}</span>
+                      {esBasicaOficial && (
+                        <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-indigo-700">{fuente}</span>
+                      )}
+                      {oficial && !esBasicaOficial && marcada && <span className="shrink-0 text-[0.68rem] text-slate-400">Incluida · prima en la básica</span>}
                       {sinTar && (
-                        <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-amber-800">
-                          Tarifa la aplica Técnico
+                        <span className="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-slate-600">
+                          Tarifa de Técnico
                         </span>
                       )}
                     </label>
                   </td>
                   <td className="px-3 py-2 text-right">
                     <input
-                      type="number" min={0} step="0.01" disabled={!marcada} value={valor} placeholder={marcada ? 'Suma' : ''}
+                      type="number" min={0} step="0.01" disabled={!activa} value={valor} placeholder={activa ? 'Suma' : ''}
                       onChange={(e) => setCombo(cramo, { ...elegidas, [c.ccober]: e.target.value })}
                       className={cn('w-32 rounded-lg border px-2 py-1 text-right tabular-nums disabled:bg-slate-50', err ? 'border-red-400' : 'border-slate-200')}
                     />
@@ -475,39 +486,114 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
                         onChange={(e) => setTecnico(cramo, c.ccober, { tasa: e.target.value })} title="Tasa de Técnico (%): prima = suma × tasa / 100"
                         className="w-20 rounded-lg border border-amber-300 px-2 py-1 text-right tabular-nums disabled:bg-slate-50" />
                     </td>
-                  ) : <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{c.pprima > 0 ? porcentaje(c.pprima) : c.mprima > 0 ? 'Prima fija' : '—'}</td>)}
+                  ) : <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{oficial
+                    ? (esBasicaOficial && oficial.tasa != null ? porcentaje(Number(oficial.tasa.toFixed(5))) : '—')
+                    : c.pprima > 0 ? porcentaje(c.pprima) : c.mprima > 0 ? 'Prima fija' : '—'}</td>)}
                   {vistaTecnica && (sinTar && marcada ? (
                     <td className="px-3 py-2 text-right">
                       <input type="number" min={0} step="0.01" value={tec.prima ?? ''} placeholder={x && x.prima > 0 ? importe(x.prima) : 'Prima'}
                         onChange={(e) => setTecnico(cramo, c.ccober, { prima: e.target.value })} title="Prima de Técnico: si la escribes, manda sobre la tasa"
                         className="w-24 rounded-lg border border-amber-300 px-2 py-1 text-right tabular-nums" />
                     </td>
-                  ) : <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>)}
+                  ) : <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{activa && x ? importe(x.prima) : '—'}</td>)}
                 </tr>
               );
             })}
           </tbody>
         </table>
       </div>
-      {intento && cot.generales.map((g) => <div key={g} className="mt-3"><Aviso tono="error">{g}</Aviso></div>)}
+      {/* Los errores de los datos de tarifa oficial se ven en su tarjeta; aquí, los demás al intentar continuar. */}
+      {intento && cot.generales.filter((g) => !oficial?.errores.includes(g)).map((g) => <div key={g} className="mt-3"><Aviso tono="error">{g}</Aviso></div>)}
       {incluidasSinTarifa.length > 0 && (
-        <div className="mt-3">
-          <Aviso tono="error">
-            El combo lleva {incluidasSinTarifa.length === 1 ? 'una cobertura' : `${incluidasSinTarifa.length} coberturas`} cuya tarifa aplica Técnico ({incluidasSinTarifa.join(', ')}): se puede cotizar, pero para emitir Técnico debe escribir su tasa o su prima (mayor a 0) con la vista técnica (Parámetros).
-          </Aviso>
-        </div>
+        <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.78rem] text-slate-600">
+          Falta la tarifa de Técnico para <strong>{incluidasSinTarifa.join(', ')}</strong>. Puedes cotizar; para emitir, Técnico la carga en
+          el «Tarificador (Configuración de tarifas)» y, al guardarla, se aplica sola aquí.
+        </p>
       )}
       {totalSinTarifa > 0 && incluidasSinTarifa.length === 0 && (
-        <p className="mt-3 text-[0.72rem] text-amber-700">
-          {totalSinTarifa === 1 ? 'Una cobertura' : `${totalSinTarifa} coberturas`} de {xramo} {totalSinTarifa === 1 ? 'lleva' : 'llevan'} la tarifa de Técnico (marcadas «Tarifa la aplica Técnico»): {vistaTecnica ? 'márcalas y escribe su tasa o su prima.' : 'se eligen con la vista técnica (Parámetros).'}
+        <p className="mt-3 text-[0.72rem] text-slate-500">
+          {totalSinTarifa === 1 ? 'Una cobertura' : `${totalSinTarifa} coberturas`} de {xramo} todavía no {totalSinTarifa === 1 ? 'tiene' : 'tienen'} tarifa (marcadas «Tarifa de Técnico»): se pueden marcar y cotizar; para emitir, Técnico la carga en el «Tarificador (Configuración de tarifas)».
         </p>
       )}
       <div className="mt-4">
         <TotalRc total={m(cot.prima_total)} detalle={`${cot.coberturas.length} ${cot.coberturas.length === 1 ? 'cobertura' : 'coberturas'} · suma asegurada ${m(cot.suma_asegurada)}`} />
       </div>
       <p className="text-[0.72rem] text-slate-500 mt-2">
-        Las obligatorias van siempre.{catalogo.some((c) => c.ccober === '1') && ' Ninguna adicional puede superar la suma de la cobertura básica.'} Tarifas vigentes de Sis2000.
+        {oficial ? (
+          <>
+            Prima: <strong>{fuente}</strong>{oficial.opcion ? ` · opción ${oficial.opcion}` : ''}{oficial.minimaAplicada ? ' · prima mínima aplicada' : ''}.
+            {vistaTecnica && oficial.tasa != null && <> Tasa {porcentaje(Number(oficial.tasa.toFixed(5)))}{oficial.clase ? ` · clase ${oficial.clase}` : ''}.</>}
+            {' '}Ninguna adicional puede superar la suma de la cobertura básica.
+          </>
+        ) : (
+          <>Las obligatorias van siempre.{catalogo.some((c) => c.ccober === '1') && ' Ninguna adicional puede superar la suma de la cobertura básica.'} Tarifas vigentes de Sis2000.</>
+        )}
       </p>
+    </SectionCard>
+  );
+}
+
+/**
+ * Ramos 27/28/37: datos mínimos del cotizador de Google para calcular la prima del combo. Son los mismos campos y el
+ * mismo store que las opciones RCG y RCP/RCE (si ya se llenaron allí, aparecen llenos).
+ */
+function DatosTarifaOficial({ oficial, intento }: { oficial: TarifaOficial; intento: boolean }) {
+  const prmRcg = useParametrosStore((s) => s.rcg);
+  const rcg = useCotizacionStore((s) => s.rcg);
+  const setRcg = useCotizacionStore((s) => s.setRcg);
+  const esContrato = useCotizacionStore((s) => s.contrato.esContrato);
+  const setContrato = useCotizacionStore((s) => s.setContrato);
+  const rc = useCotizacionStore((s) => s.rc);
+  const setRcProducto = useCotizacionStore((s) => s.setRcProducto);
+  const k: K = oficial.cotizador === 'rce' ? 'e' : 'p';
+  const nombre = NOMBRE_COTIZADOR[oficial.cotizador];
+  const errores = intento ? oficial.errores : [];
+
+  if (oficial.cotizador === 'rcg') {
+    const clase = prmRcg.clases[rcg.clase] ?? prmRcg.clases[0];
+    const esIndole = (e: string) => /índole/i.test(e);
+    const esTasa = (e: string) => e.startsWith('Rango');
+    return (
+      <SectionCard title={`Datos de tarifa · cotizador ${nombre}`} Icon={Calculator}
+        description="Con estos datos se aplica la tarifa oficial del RCG. El límite es la suma que escribas en la cobertura básica (opción I).">
+        <div className="grid sm:grid-cols-2 gap-4">
+          <CamposClaseRcg errorIndole={errores.find(esIndole)} />
+          <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={oficial.errores.find(esTasa)}>
+            <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
+          </Field>
+          <Field label="Moneda" hint="Define la cobertura básica de Sis2000 que lleva la prima.">
+            <Select value={rcg.moneda} onChange={(e) => setRcg({ moneda: e.target.value as MonedaRcg })}>
+              {MONEDAS_RCG.map((x) => <option key={x} value={x}>{x}</option>)}
+            </Select>
+          </Field>
+        </div>
+        <div className="mt-3">
+          <Casilla checked={esContrato} onChange={(v) => setContrato({ esContrato: v })} detalle="Los datos del contrato se piden en el paso del tomador.">Con contrato</Casilla>
+        </div>
+        {errores.filter((e) => !esIndole(e) && !esTasa(e)).map((e) => <div key={e} className="mt-3"><Aviso tono="error">{e}</Aviso></div>)}
+      </SectionCard>
+    );
+  }
+
+  const x = rc[k];
+  return (
+    <SectionCard title={`Datos de tarifa · cotizador ${nombre}`} Icon={Calculator}
+      description={`Con estos datos se aplica la tarifa oficial de ${NOMBRES[k]}. La prima no depende de la suma que escribas en la básica.`}>
+      <div className="grid sm:grid-cols-2 gap-4">
+        <CamposClaseRc intento={intento} conActividad={k === 'e'} conIndole={false} />
+        <CamposNominaRc />
+        <Field label="Tasa básica (%)" hint="Se propone la tasa media del rango al elegir la clase o la actividad.">
+          <Input type="number" step="any" value={x.tasa} onChange={(e) => setRcProducto(k, { tasa: e.target.value })} />
+        </Field>
+        {rc.moneda !== 'VES' && (
+          <Field label="Opción">
+            <Select value={x.opcion} onChange={(e) => setRcProducto(k, { opcion: e.target.value as IdOpcion })}>
+              {OPCIONES.map((o) => <option key={o} value={o}>Opción {o}</option>)}
+            </Select>
+          </Field>
+        )}
+      </div>
+      {errores.map((e) => <div key={e} className="mt-3"><Aviso tono="error">{e}</Aviso></div>)}
     </SectionCard>
   );
 }

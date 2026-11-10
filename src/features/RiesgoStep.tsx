@@ -74,19 +74,14 @@ function RiesgoPlan() {
   );
 }
 
-function RiesgoRcg() {
+/** Clase de riesgo e índole del RCG (mismo store y reglas). Lo usan la opción RCG y el combo del ramo 28. */
+export function CamposClaseRcg({ errorIndole }: { errorIndole?: string }) {
   const prm = useParametrosStore((s) => s.rcg);
   const rcg = useCotizacionStore((s) => s.rcg);
   const setRcg = useCotizacionStore((s) => s.setRcg);
-  const cot = useCotizacionRcg();
-  const [intento, setIntento] = useState(false);
   const clase = prm.clases[rcg.clase] ?? prm.clases[0];
-  const err = (k: 'indole' | 'actividadEspecifica') => (intento || rcg[k] ? cot.errores[k] : undefined);
-
   return (
-    <div className="space-y-5">
-      <SectionCard title="Clase de riesgo" description="Define el rango de tasa permitido." Icon={Building2}>
-        <div className="grid sm:grid-cols-2 gap-4">
+    <>
           <Field label="Clase de riesgo" full hint={`Rango de tasa: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`}>
             <Select value={rcg.clase} onChange={(e) => {
               const i = Number(e.target.value);
@@ -95,7 +90,7 @@ function RiesgoRcg() {
               {prm.clases.map((c, i) => <option key={c.nombre} value={i}>{c.etiqueta} ({c.min.toFixed(2)} % – {c.max.toFixed(2)} %)</option>)}
             </Select>
           </Field>
-          <Field label="Índole específica" full error={err('indole')}
+          <Field label="Índole específica" full error={errorIndole}
             hint={rcg.indole === INDOLE_OTRA ? 'Describe claramente la actividad abajo. Sujeto a revisión de suscripción.' : 'Selección sujeta a revisión de suscripción.'}>
             <Select value={rcg.indole} onChange={(e) => setRcg({ indole: e.target.value })}>
               <option value="">Seleccione una índole específica…</option>
@@ -111,6 +106,22 @@ function RiesgoRcg() {
               </optgroup>
             </Select>
           </Field>
+    </>
+  );
+}
+
+function RiesgoRcg() {
+  const rcg = useCotizacionStore((s) => s.rcg);
+  const setRcg = useCotizacionStore((s) => s.setRcg);
+  const cot = useCotizacionRcg();
+  const [intento, setIntento] = useState(false);
+  const err = (k: 'indole' | 'actividadEspecifica') => (intento || rcg[k] ? cot.errores[k] : undefined);
+
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Clase de riesgo" description="Define el rango de tasa permitido." Icon={Building2}>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <CamposClaseRcg errorIndole={err('indole')} />
           <Field label="Actividad específica" full error={err('actividadEspecifica')}>
             <Input value={rcg.actividadEspecifica} maxLength={180} onChange={(e) => setRcg({ actividadEspecifica: e.target.value })} placeholder="Ej. Venta de medicinas y artículos de cuidado personal" />
           </Field>
@@ -130,17 +141,17 @@ function RiesgoRcg() {
   );
 }
 
-function RiesgoRc() {
+/**
+ * Clase común y actividad del riesgo de RCP/RCE (mismo store y reglas). Lo usan la opción RC y el combo de los ramos
+ * 27 y 37; el combo RCP no pide la actividad (`conActividad` false) porque la tasa patronal no depende de ella.
+ */
+export function CamposClaseRc({ intento, conActividad = true, conIndole = true }: { intento: boolean; conActividad?: boolean; conIndole?: boolean }) {
   const prmRc = useParametrosStore((s) => s.rc);
   const rc = useCotizacionStore((s) => s.rc);
   const setRc = useCotizacionStore((s) => s.setRc);
   const setRcProducto = useCotizacionStore((s) => s.setRcProducto);
-  const cot = useCotizacionRc();
-  const [intento, setIntento] = useState(false);
   const [filtro, setFiltro] = useState('');
   const clase = claseRc(rc);
-  const ves = rc.moneda === 'VES';
-  const simbolo = ves ? 'Bs' : rc.moneda;
   const actividades = useMemo(() => (clase === null ? [] : actividadesDeClase(clase, prmRc)), [clase, prmRc]);
   const filtradas = actividades.filter((i) => !filtro || prmRc.actividades[i][0].toLowerCase().includes(filtro.toLowerCase()));
   const actividad = rc.actividad === '' ? null : prmRc.actividades[Number(rc.actividad)];
@@ -153,12 +164,12 @@ function RiesgoRc() {
   };
 
   return (
-    <div className="space-y-5">
-      <SectionCard title="Clasificación del riesgo" description="La clase común define la tasa patronal; la actividad, la empresarial." Icon={Building2}>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Field label="Índole (descripción de la actividad)" full>
-            <Input value={rc.indole} onChange={(e) => setRc({ indole: e.target.value })} placeholder="Ej. Venta de repuestos automotrices" />
-          </Field>
+    <>
+          {conIndole && (
+            <Field label="Índole (descripción de la actividad)" full>
+              <Input value={rc.indole} onChange={(e) => setRc({ indole: e.target.value })} placeholder="Ej. Venta de repuestos automotrices" />
+            </Field>
+          )}
           <Field label="Clase común" full hint={clase !== null ? `Patronal: ${porcentaje(prmRc.clases[clase][1])} – ${porcentaje(prmRc.clases[clase][2])}` : undefined}>
             <Select value={rc.claseSel} onChange={(e) => {
               const v = e.target.value;
@@ -178,7 +189,7 @@ function RiesgoRc() {
               </Select>
             </Field>
           )}
-          {clase !== null && (
+          {conActividad && clase !== null && (
             <>
               <Field label="Buscar actividad">
                 <div className="relative">
@@ -199,11 +210,19 @@ function RiesgoRc() {
               </Field>
             </>
           )}
-        </div>
-      </SectionCard>
+    </>
+  );
+}
 
-      <SectionCard title="Nómina" description="Base del cálculo de la prima y de los límites por trabajador." Icon={Users}>
-        <div className="grid sm:grid-cols-2 gap-4">
+/** Moneda y nómina de RCP/RCE (mismo store y reglas). Lo usan la opción RC y el combo de los ramos 27 y 37. */
+export function CamposNominaRc() {
+  const rc = useCotizacionStore((s) => s.rc);
+  const setRc = useCotizacionStore((s) => s.setRc);
+  const cot = useCotizacionRc();
+  const ves = rc.moneda === 'VES';
+  const simbolo = ves ? 'Bs' : rc.moneda;
+  return (
+    <>
           <Field label="Moneda">
             <Select value={rc.moneda} onChange={(e) => setRc({ moneda: e.target.value as MonedaRc })}>
               <option value="USD">Dólares (USD)</option>
@@ -232,6 +251,25 @@ function RiesgoRc() {
             <p className="text-[0.65rem] font-bold uppercase tracking-wider text-indigo-500">Nómina anual total</p>
             <p className="font-display text-xl font-black gradient-text-indigo tabular-nums">{simbolo} {importe(cot.nomina)}</p>
           </div>
+    </>
+  );
+}
+
+function RiesgoRc() {
+  const cot = useCotizacionRc();
+  const [intento, setIntento] = useState(false);
+
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Clasificación del riesgo" description="La clase común define la tasa patronal; la actividad, la empresarial." Icon={Building2}>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <CamposClaseRc intento={intento} />
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Nómina" description="Base del cálculo de la prima y de los límites por trabajador." Icon={Users}>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <CamposNominaRc />
         </div>
       </SectionCard>
 

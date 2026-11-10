@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { cotizarCombo, monedaCombo } from '../tarifas/combo';
-import { useCotizacionStore } from './cotizacionStore';
+import { cotizadorDeRamo, tarifaOficialCombo } from '../tarifas/combo-rc';
+import { solicitudRc, solicitudRcg, useCotizacionStore } from './cotizacionStore';
 import { usePlanesStore } from './planesStore';
 import { useParametrosStore } from './parametrosStore';
 
@@ -15,14 +16,28 @@ export function useCotizacionCombo() {
   const cramo = useCotizacionStore((s) => s.ramoCombo);
   const combos = useCotizacionStore((s) => s.combos);
   const tecnicoCombo = useCotizacionStore((s) => s.tecnicoCombo);
+  // Datos de tarifa de los ramos 27/28/37: los mismos campos del store que usan las opciones RCG y RCP/RCE.
+  // Cada selector devuelve una rama del estado (referencia estable), nunca un objeto nuevo.
+  const comun = useCotizacionStore((s) => s.comun);
+  const contrato = useCotizacionStore((s) => s.contrato);
+  const rcg = useCotizacionStore((s) => s.rcg);
+  const rc = useCotizacionStore((s) => s.rc);
+  const prmRcg = useParametrosStore((s) => s.rcg);
+  const prmRc = useParametrosStore((s) => s.rc);
   // Sin vista técnica no hay quien fije la prima de las coberturas sin tarifa: no se usan los valores de Técnico.
   const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
   const catalogo = usePlanesStore((s) => (cramo == null ? null : s.catalogos[cramo]?.coberturas ?? null));
   return useMemo(() => {
     if (cramo == null || !catalogo) return null;
     const elegidas = combos[cramo] ?? {};
-    const cot = cotizarCombo(catalogo, elegidas, vistaTecnica ? tecnicoCombo[cramo] ?? {} : undefined);
+    const cotizador = cotizadorDeRamo(cramo);
+    const oficial = !cotizador ? null : tarifaOficialCombo(cotizador, elegidas, {
+      rcg: solicitudRcg({ comun, contrato, rcg }),
+      // La índole del RCP/RCE: si no se escribió, la actividad descrita en el paso de riesgo del combo.
+      rc: solicitudRc({ comun, contrato, rc: { ...rc, indole: rc.indole.trim() || rcg.actividadEspecifica } }),
+    }, { rcg: prmRcg, rc: prmRc });
+    const cot = cotizarCombo(catalogo, elegidas, vistaTecnica ? tecnicoCombo[cramo] ?? {} : undefined, oficial);
     const valida = !Object.keys(cot.errores).length && !cot.generales.length;
-    return { cramo, catalogo, elegidas, cot, valida, moneda: monedaCombo(catalogo) };
-  }, [cramo, combos, catalogo, tecnicoCombo, vistaTecnica]);
+    return { cramo, catalogo, elegidas, cot, valida, oficial, moneda: oficial ? oficial.moneda : monedaCombo(catalogo) };
+  }, [cramo, combos, catalogo, tecnicoCombo, vistaTecnica, comun, contrato, rcg, rc, prmRcg, prmRc]);
 }
