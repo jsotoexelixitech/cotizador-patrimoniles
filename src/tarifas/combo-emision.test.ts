@@ -68,7 +68,7 @@ describe('combo: coberturas sin tarifa en Sis2000', () => {
     const cot = cotizarCombo(cat18, { '1': '1000', '4': '1000' });
     expect(coberturasSinTarifa(cat18, cot)).toEqual(['BÁSICA']);
     const f = faltantesEmisionCombo({ cramo: 18, cplan: 'P1', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: ['BÁSICA'], primaTotal: cot.prima_total });
-    expect(f).toEqual(['Falta la tarifa de Técnico para BÁSICA. Para emitir, Técnico la carga en el «Tarificador (Configuración de tarifas)»; al guardarla se aplica sola. Con la vista técnica también se puede escribir aquí la tasa o la prima.']);
+    expect(f).toEqual(['Falta la tasa de BÁSICA: escríbela en la columna «Tasa %» del paso de cotización (o que Técnico la cargue en el «Tarificador»).']);
     expect(faltantesEmisionCombo({ cramo: 18, cplan: 'P1', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: [], primaTotal: 0 }))
       .toEqual(['La prima total del combo es 0: no se puede emitir una póliza sin prima.']);
   });

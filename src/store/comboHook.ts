@@ -24,8 +24,6 @@ export function useCotizacionCombo() {
   const rc = useCotizacionStore((s) => s.rc);
   const prmRcg = useParametrosStore((s) => s.rcg);
   const prmRc = useParametrosStore((s) => s.rc);
-  // Sin vista técnica no hay quien fije la prima de las coberturas sin tarifa: no se usan los valores de Técnico.
-  const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
   const catalogo = usePlanesStore((s) => (cramo == null ? null : s.catalogos[cramo]?.coberturas ?? null));
   return useMemo(() => {
     if (cramo == null || !catalogo) return null;
@@ -36,8 +34,8 @@ export function useCotizacionCombo() {
       // La índole del RCP/RCE: si no se escribió, la actividad descrita en el paso de riesgo del combo.
       rc: solicitudRc({ comun, contrato, rc: { ...rc, indole: rc.indole.trim() || rcg.actividadEspecifica } }),
     }, { rcg: prmRcg, rc: prmRc });
-    const cot = cotizarCombo(catalogo, elegidas, vistaTecnica ? tecnicoCombo[cramo] ?? {} : undefined, oficial);
+    const cot = cotizarCombo(catalogo, elegidas, tecnicoCombo[cramo] ?? {}, oficial);
     const valida = !Object.keys(cot.errores).length && !cot.generales.length;
     return { cramo, catalogo, elegidas, cot, valida, oficial, moneda: oficial ? oficial.moneda : monedaCombo(catalogo) };
-  }, [cramo, combos, catalogo, tecnicoCombo, vistaTecnica, comun, contrato, rcg, rc, prmRcg, prmRc]);
+  }, [cramo, combos, catalogo, tecnicoCombo, comun, contrato, rcg, rc, prmRcg, prmRc]);
 }

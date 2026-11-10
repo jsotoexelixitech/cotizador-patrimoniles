@@ -185,7 +185,7 @@ export function faltantesEmisionCombo(x: {
   if (x.sinTarifa?.length) {
     const n = x.sinTarifa;
     const lista = n.length > 5 ? `${n.slice(0, 5).join(', ')} y ${n.length - 5} más` : n.join(', ');
-    f.push(`Falta la tarifa de Técnico para ${lista}. Para emitir, Técnico la carga en el «Tarificador (Configuración de tarifas)»; al guardarla se aplica sola. Con la vista técnica también se puede escribir aquí la tasa o la prima.`);
+    f.push(`Falta la tasa de ${lista}: escríbela en la columna «Tasa %» del paso de cotización (o que Técnico la cargue en el «Tarificador»).`);
   }
   if (x.primaTotal !== undefined && !(x.primaTotal > 0)) f.push('La prima total del combo es 0: no se puede emitir una póliza sin prima.');
   const rif = x.documento.replace(/\D/g, '');

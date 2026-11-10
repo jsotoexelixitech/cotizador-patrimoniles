@@ -422,6 +422,8 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
   const fuente = oficial ? `Tarifa oficial (cotizador ${NOMBRE_COTIZADOR[oficial.cotizador]})` : '';
   const totalSinTarifa = oficial ? 0 : catalogo.filter(sinTarifa).length;
   const incluidasSinTarifa = coberturasSinTarifa(catalogo, cot);
+  // Sin tarifa oficial, la tasa se puede crear aquí para esta cotización (se emite con ella).
+  const verTasa = vistaTecnica || !oficial;
   return (
     <SectionCard title={`Arma el combo · ${xramo}`} Icon={ListChecks} statusLabel={`Ramo ${cramo}`}
       description={oficial
@@ -435,7 +437,7 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
             <tr>
               <th className="text-left font-bold px-3 py-2">Cobertura</th>
               <th className="text-right font-bold px-3 py-2">Suma asegurada</th>
-              {vistaTecnica && <th className="text-right font-bold px-3 py-2">Tasa</th>}
+              {verTasa && <th className="text-right font-bold px-3 py-2">Tasa %</th>}
               {vistaTecnica && <th className="text-right font-bold px-3 py-2">Prima</th>}
             </tr>
           </thead>
@@ -480,7 +482,7 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
                     />
                     {(err || limites) && <p className={cn('text-[0.68rem] mt-0.5', err ? 'text-red-600' : 'text-slate-400')}>{err ?? limites}</p>}
                   </td>
-                  {vistaTecnica && (sinTar && marcada ? (
+                  {verTasa && (sinTar && marcada ? (
                     <td className="px-3 py-2 text-right">
                       <input type="number" min={0} step="0.0001" value={tec.tasa ?? ''} placeholder="Tasa %" disabled={!!tec.prima?.trim()}
                         onChange={(e) => setTecnico(cramo, c.ccober, { tasa: e.target.value })} title="Tasa de Técnico (%): prima = suma × tasa / 100"
@@ -506,8 +508,8 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
       {intento && cot.generales.filter((g) => !oficial?.errores.includes(g)).map((g) => <div key={g} className="mt-3"><Aviso tono="error">{g}</Aviso></div>)}
       {incluidasSinTarifa.length > 0 && (
         <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.78rem] text-slate-600">
-          Falta la tarifa de Técnico para <strong>{incluidasSinTarifa.join(', ')}</strong>. Puedes cotizar; para emitir, Técnico la carga en
-          el «Tarificador (Configuración de tarifas)» y, al guardarla, se aplica sola aquí.
+          Sin tasa en Sis2000: <strong>{incluidasSinTarifa.join(', ')}</strong>. Escribe la <strong>tasa %</strong> en la columna «Tasa %» de cada una
+          (prima = suma × tasa / 100) y se emite con esa tasa. También puede cargarla Técnico en el «Tarificador» para que quede fija.
         </p>
       )}
       {totalSinTarifa > 0 && incluidasSinTarifa.length === 0 && (

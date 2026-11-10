@@ -138,8 +138,15 @@ describe('combo en ramos sin tarifa de Google (16)', () => {
     expect(sin).toEqual(['ROBO']);
     const f = faltantesEmisionCombo({ cramo: 16, cplan: 'P1', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: sin, primaTotal: cot.prima_total });
     expect(f).toHaveLength(1);
-    expect(f[0]).toContain('Falta la tarifa de Técnico para ROBO');
-    expect(f[0]).toContain('Tarificador (Configuración de tarifas)');
+    expect(f[0]).toContain('Falta la tasa de ROBO');
+    expect(f[0]).toContain('Tasa %');
+  });
+
+  it('con la tasa escrita en el combo (sin vista técnica) se cotiza y se puede emitir', () => {
+    const cot = cotizarCombo(catalogo16, { '1': '10000', '9': '5000' }, { '9': { tasa: '0.4' } });
+    expect(cot.coberturas.find((x) => x.ccober === '9')?.prima).toBe(20);
+    expect(coberturasSinTarifa(catalogo16, cot)).toEqual([]);
+    expect(faltantesEmisionCombo({ cramo: 16, cplan: 'P1', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: [], primaTotal: cot.prima_total })).toEqual([]);
   });
 
   it('con la tasa ya cargada en matarifa_d se usa sola', () => {
