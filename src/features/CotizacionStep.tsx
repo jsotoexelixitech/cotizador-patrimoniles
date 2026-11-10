@@ -17,6 +17,7 @@ import { RAMO_RCG, primasTarifaRcg } from '../tarifas/planes-rcg';
 import { sumaDe } from '../tarifas/coberturas';
 import { esRamoCoberturas, useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
+import { coberturasSinTarifa, sinTarifa } from '../tarifas/combo';
 import { toast } from '../store/toastStore';
 import { AvisoMesaTecnica } from './RiesgoStep';
 
@@ -409,6 +410,10 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
     setCombo(cramo, v ? { ...elegidas, [ccober]: '' } : Object.fromEntries(Object.entries(elegidas).filter(([k]) => k !== ccober)));
 
   if (!catalogo.length) return <Aviso>{xramo} no tiene coberturas con tarifa vigente en Sis2000.</Aviso>;
+  // Sin tasa ni prima fija en Sis2000: se marcan en la tabla; las opcionales no se pueden elegir y, si una
+  // obligatoria no tiene tarifa, el combo se puede cotizar pero no emitir.
+  const totalSinTarifa = catalogo.filter(sinTarifa).length;
+  const incluidasSinTarifa = coberturasSinTarifa(catalogo, cot);
   return (
     <SectionCard title={`Arma el combo · ${xramo}`} Icon={ListChecks} statusLabel={`Ramo ${cramo}`}
       description={vistaTecnica
@@ -432,12 +437,21 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
               // El error se ve al escribir la suma o al intentar continuar; antes, solo los topes.
               const err = marcada && (intento || valor !== '') ? cot.errores[c.ccober] : undefined;
               const limites = topes(c.msumamin, c.msumamax);
+              const sinTar = sinTarifa(c);
+              // Una opcional sin tarifa no se puede marcar (sí desmarcar si ya estaba elegida).
+              const bloqueada = c.obligatoria || (sinTar && !marcada);
               return (
-                <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400')}>
+                <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400', sinTar && 'bg-amber-50/60')}>
                   <td className="px-3 py-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={c.obligatoria} onChange={(e) => alternar(c.ccober, e.target.checked)} />
+                    <label className={cn('flex items-center gap-2', bloqueada ? 'cursor-default' : 'cursor-pointer')}
+                      title={sinTar ? 'Sin tasa ni prima fija en Sis2000 (matarifa_d): no se puede emitir con esta cobertura.' : undefined}>
+                      <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={bloqueada} onChange={(e) => alternar(c.ccober, e.target.checked)} />
                       <span className={marcada ? 'text-slate-700' : ''}>{c.nombre}{c.obligatoria ? ' · obligatoria' : ''}</span>
+                      {sinTar && (
+                        <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-amber-800">
+                          Sin tarifa
+                        </span>
+                      )}
                     </label>
                   </td>
                   <td className="px-3 py-2 text-right">
@@ -457,6 +471,18 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
         </table>
       </div>
       {intento && cot.generales.map((g) => <div key={g} className="mt-3"><Aviso tono="error">{g}</Aviso></div>)}
+      {incluidasSinTarifa.length > 0 && (
+        <div className="mt-3">
+          <Aviso tono="error">
+            El combo lleva {incluidasSinTarifa.length === 1 ? 'una cobertura' : `${incluidasSinTarifa.length} coberturas`} sin tarifa en Sis2000 ({incluidasSinTarifa.join(', ')}): se puede cotizar, pero no emitir hasta que La Mundial cargue su tasa o prima fija.
+          </Aviso>
+        </div>
+      )}
+      {totalSinTarifa > 0 && incluidasSinTarifa.length === 0 && (
+        <p className="mt-3 text-[0.72rem] text-amber-700">
+          {totalSinTarifa === 1 ? 'Una cobertura' : `${totalSinTarifa} coberturas`} de {xramo} no {totalSinTarifa === 1 ? 'tiene' : 'tienen'} tarifa en Sis2000 (marcadas «Sin tarifa»): no se pueden elegir.
+        </p>
+      )}
       <div className="mt-4">
         <TotalRc total={m(cot.prima_total)} detalle={`${cot.coberturas.length} ${cot.coberturas.length === 1 ? 'cobertura' : 'coberturas'} · suma asegurada ${m(cot.suma_asegurada)}`} />
       </div>

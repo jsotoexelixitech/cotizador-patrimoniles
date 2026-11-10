@@ -43,6 +43,18 @@ export function parsearCoberturasRamo(body: unknown): CoberturaRamo[] {
     .sort((a, b) => orden(a.ccober) - orden(b.ccober) || a.ccober.localeCompare(b.ccober));
 }
 
+/** Sin tarifa en Sis2000: ni tasa (pprima) ni prima fija (mprima). Su prima sería 0: no se puede emitir con ella. */
+export const sinTarifa = (c: { pprima: number; mprima: number }) => !(c.pprima > 0) && !(c.mprima > 0);
+
+/** Nombres de las coberturas del combo (elegidas u obligatorias) que no tienen tarifa en Sis2000. */
+export function coberturasSinTarifa(catalogo: CoberturaRamo[], cot: CotizacionCoberturas): string[] {
+  const porCob = new Map(catalogo.map((c) => [c.ccober, c]));
+  return cot.coberturas.filter((c) => {
+    const t = porCob.get(c.ccober);
+    return t ? sinTarifa(t) : false;
+  }).map((c) => c.nombre);
+}
+
 /** Moneda del combo para mostrar: la de sus coberturas en Sis2000 ('$' = USD). */
 export const monedaCombo = (catalogo: CoberturaRamo[]) => {
   const m = catalogo[0]?.cmoneda.trim() ?? '';
@@ -100,9 +112,21 @@ export function planesContenedor(catalogo: RamoCatalogo[], cramo: number | null)
 }
 
 /** Lo que falta para poder emitir el combo (vacío = listo). */
-export function faltantesEmisionCombo(x: { cramo: number | null; cplan: string; apartamento: string; valida: boolean; documento: string }): string[] {
+export function faltantesEmisionCombo(x: {
+  cramo: number | null; cplan: string; apartamento: string; valida: boolean; documento: string;
+  /** Coberturas del combo sin tasa ni prima fija en Sis2000 (no se emite con ellas). */
+  sinTarifa?: string[];
+  /** Prima total calculada; una póliza nunca sale con prima 0. */
+  primaTotal?: number;
+}): string[] {
   const f: string[] = [];
   if (!x.valida) f.push('Revisa las coberturas y sumas en el paso de cotización.');
+  if (x.sinTarifa?.length) {
+    const n = x.sinTarifa;
+    const lista = n.length > 5 ? `${n.slice(0, 5).join(', ')} y ${n.length - 5} más` : n.join(', ');
+    f.push(`Sin tarifa en Sis2000 (sin tasa ni prima fija): ${lista}. No se puede emitir con esas coberturas hasta que La Mundial cargue su tarifa.`);
+  }
+  if (x.primaTotal !== undefined && !(x.primaTotal > 0)) f.push('La prima total del combo es 0: no se puede emitir una póliza sin prima.');
   const rif = x.documento.replace(/\D/g, '');
   if (!rif || rif.length > 9) f.push('Indica el RIF o la cédula del tomador (hasta 9 dígitos) en el paso del tomador.');
   if (!x.cplan.trim()) f.push('Elige el plan contenedor.');

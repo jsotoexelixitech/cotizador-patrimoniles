@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armarEmisionCombo, cotizarCombo, faltantesEmisionCombo, parsearCoberturasRamo, pideUnidad, planesContenedor } from './combo';
+import { armarEmisionCombo, coberturasSinTarifa, cotizarCombo, faltantesEmisionCombo, parsearCoberturasRamo, pideUnidad, planesContenedor, sinTarifa } from './combo';
 import { parsearCatalogo } from './planes-rcg';
 
 const cob = (ccober: string, xcobertura: string, pprima: number, extra = {}) =>
@@ -49,5 +49,33 @@ describe('Emisión del combo con plan contenedor', () => {
       tomador: { tipo_cedula: 'J', rif: '123456789', nombre: 'ACME', apellido: '', direccion: 'Caracas', telefono: '04121234567', correo: 'a@b.com' },
       bien: 'Local', direccion_riesgo: 'Caracas', apartamento: 7, productor: 80080,
     });
+  });
+});
+
+describe('combo: coberturas sin tarifa en Sis2000', () => {
+  // Como el ramo 18 en QA: la básica sin tasa ni prima fija, una con tasa y una opcional sin tarifa.
+  const cat18 = parsearCoberturasRamo({ status: true, data: { cramo: 18, coberturas: [
+    cob('1', 'BÁSICA', 0), cob('4', 'INCENDIO', 0.1), cob('9', 'ROBO', 0, { mprima: 0 }), cob('6', 'ASISTENCIA', 0, { mprima: 0.4 }),
+  ] } });
+
+  it('identifica las coberturas sin tasa ni prima fija', () => {
+    expect(cat18.filter(sinTarifa).map((c) => c.ccober)).toEqual(['1', '9']);
+    expect(sinTarifa({ pprima: 0, mprima: 0.4 })).toBe(false);
+    expect(sinTarifa({ pprima: 0.1, mprima: 0 })).toBe(false);
+  });
+
+  it('lista las del combo sin tarifa y bloquea la emisión (con prima 0 también)', () => {
+    const cot = cotizarCombo(cat18, { '1': '1000', '4': '1000' });
+    expect(coberturasSinTarifa(cat18, cot)).toEqual(['BÁSICA']);
+    const f = faltantesEmisionCombo({ cramo: 18, cplan: 'P1', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: ['BÁSICA'], primaTotal: cot.prima_total });
+    expect(f).toEqual(['Sin tarifa en Sis2000 (sin tasa ni prima fija): BÁSICA. No se puede emitir con esas coberturas hasta que La Mundial cargue su tarifa.']);
+    expect(faltantesEmisionCombo({ cramo: 18, cplan: 'P1', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: [], primaTotal: 0 }))
+      .toEqual(['La prima total del combo es 0: no se puede emitir una póliza sin prima.']);
+  });
+
+  it('con tarifa en todas y prima > 0 no agrega nada', () => {
+    const cot = cotizarCombo(catalogo, { '1': '1000' });
+    expect(coberturasSinTarifa(catalogo, cot)).toEqual([]);
+    expect(faltantesEmisionCombo({ cramo: 27, cplan: 'P2', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: [], primaTotal: cot.prima_total })).toEqual([]);
   });
 });

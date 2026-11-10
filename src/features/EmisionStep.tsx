@@ -21,7 +21,7 @@ import { armarEmisionCoberturas } from '../tarifas/coberturas';
 import { useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
 import { Field, Input, Select } from '../components/ui/FormField';
-import { armarEmisionCombo, faltantesEmisionCombo, pideUnidad, planesContenedor } from '../tarifas/combo';
+import { armarEmisionCombo, coberturasSinTarifa, faltantesEmisionCombo, pideUnidad, planesContenedor } from '../tarifas/combo';
 import type { ResultadoEmision } from '../tarifas/planes-rcg';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
@@ -375,7 +375,11 @@ function EmitirCombo() {
   const cramo = r?.cramo ?? null;
   const planesRamo = planesContenedor(contenedores ?? [], cramo);
   const { comun: c, rcg } = s;
-  const faltan = faltantesEmisionCombo({ cramo, cplan, apartamento: c.apartamento, valida: !!r?.valida, documento: c.documento });
+  const faltan = faltantesEmisionCombo({
+    cramo, cplan, apartamento: c.apartamento, valida: !!r?.valida, documento: c.documento,
+    sinTarifa: r ? coberturasSinTarifa(r.catalogo, r.cot) : [],
+    primaTotal: r?.cot.prima_total,
+  });
 
   useEffect(() => { void cargarContenedores(); }, [cargarContenedores]);
   // Un solo plan vigente: se elige solo. Al cambiar de ramo se limpia la elección.
