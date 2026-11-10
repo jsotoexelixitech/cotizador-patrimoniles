@@ -179,6 +179,8 @@ export function faltantesEmisionCombo(x: {
   sinTarifa?: string[];
   /** Prima total calculada; una póliza nunca sale con prima 0. */
   primaTotal?: number;
+  /** Ubicación del riesgo (direccion_riesgo): obligatoria en la emisión. Sin el campo no se valida (compatibilidad). */
+  direccion?: string;
 }): string[] {
   const f: string[] = [];
   if (!x.valida) f.push('Revisa las coberturas y sumas en el paso de cotización.');
