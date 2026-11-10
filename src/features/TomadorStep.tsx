@@ -65,12 +65,14 @@ export function TomadorStep() {
               <Input value={c.apellido} maxLength={120} onChange={(e) => setComun({ apellido: e.target.value })} />
             </Field>
           )}
-          <Field label={rcg && !planes ? 'RIF (opcional)' : 'RIF'} error={errores.documento}>
+          <Field label={rcg && !planes ? 'RIF (opcional)' : 'RIF'} error={errores.documento}
+            hint={errores.documento ? undefined : 'Máximo 9 dígitos: 8 + el dígito verificador (ej. J-12345678-9 → 123456789). Obligatorio para emitir.'}>
             <IdentityInput
               tipoDoc={c.tipoDoc}
               identificacion={c.documento}
               onTipoDocChange={(v) => setComun({ tipoDoc: v })}
-              onIdentificacionChange={(v) => setComun({ documento: v })}
+              // Sis2000 guarda el RIF/cédula en 9 dígitos: no se deja escribir más.
+              onIdentificacionChange={(v) => setComun({ documento: v.replace(/\D/g, '').slice(0, 9) })}
               placeholder="Ej. 123456789"
             />
           </Field>
