@@ -4,7 +4,7 @@
 import { normalizar, redondear } from './comun';
 import { armarEmisionCoberturas, type DatosEmisionCoberturas } from './coberturas';
 import type { CoberturaRamo } from './combo';
-import { pideUnidad } from './combo';
+import { FALTA_DIRECCION, pideUnidad } from './combo';
 import {
   BASICA_RCE, BASICA_RCG, BASICA_RCP, MAPEO_RCE, MAPEO_RCG, MAPEO_RCP, RAMOS_RC,
   type CotizadorRc, type MapeoCobertura, type MonedaSis2000,
@@ -93,6 +93,8 @@ export function coberturasRc(r: ResultadoProducto, monedaRc: string, catalogo?: 
 /** Lo que falta para emitir con prima informada (vacío = listo). */
 export function faltantesEmisionRc(x: {
   emision: CoberturasEmision | null; valida: boolean; documento: string; cplan: string; apartamento: string;
+  /** Ubicación del riesgo (direccion_riesgo): obligatoria en la emisión. */
+  direccion?: string;
 }): string[] {
   const f: string[] = [];
   if (!x.valida || !x.emision) f.push('Revisa la cotización: tiene errores o no hay opción elegida.');
@@ -103,6 +105,7 @@ export function faltantesEmisionRc(x: {
   if (e?.lineas.some((l) => !(l.suma > 0))) f.push('Hay coberturas con suma 0.');
   const rif = x.documento.replace(/\D/g, '');
   if (!rif || rif.length > 9) f.push('Indica el RIF o la cédula del tomador (hasta 9 dígitos) en el paso del tomador.');
+  if (x.direccion !== undefined && !x.direccion.trim()) f.push(FALTA_DIRECCION);
   if (!x.cplan.trim()) f.push('Elige el plan contenedor.');
   if (e && pideUnidad(e.cramo) && !(Number(x.apartamento) > 0)) f.push(`En el ramo ${e.cramo} indica el número de apartamento o unidad.`);
   return f;

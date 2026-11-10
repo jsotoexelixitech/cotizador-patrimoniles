@@ -172,6 +172,9 @@ export function planesContenedor(catalogo: RamoCatalogo[], cramo: number | null)
     .sort((a, b) => a.cplan.localeCompare(b.cplan, 'es', { numeric: true }));
 }
 
+/** nest-api exige direccion_riesgo (sale de la ubicación del riesgo del paso del tomador). */
+export const FALTA_DIRECCION = 'Indica la ubicación (dirección) del riesgo en el paso del tomador: Sis2000 la exige para emitir.';
+
 /** Lo que falta para poder emitir el combo (vacío = listo). */
 export function faltantesEmisionCombo(x: {
   cramo: number | null; cplan: string; apartamento: string; valida: boolean; documento: string;
@@ -192,6 +195,7 @@ export function faltantesEmisionCombo(x: {
   if (x.primaTotal !== undefined && !(x.primaTotal > 0)) f.push('La prima total del combo es 0: no se puede emitir una póliza sin prima.');
   const rif = x.documento.replace(/\D/g, '');
   if (!rif || rif.length > 9) f.push('Indica el RIF o la cédula del tomador (hasta 9 dígitos) en el paso del tomador.');
+  if (x.direccion !== undefined && !x.direccion.trim()) f.push(FALTA_DIRECCION);
   if (!x.cplan.trim()) f.push('Elige el plan contenedor.');
   if (pideUnidad(x.cramo) && !(Number(x.apartamento) > 0)) f.push(`En el ramo ${x.cramo} indica el número de apartamento o unidad.`);
   return f;

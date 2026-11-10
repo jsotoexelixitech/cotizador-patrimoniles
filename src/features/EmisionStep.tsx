@@ -372,6 +372,7 @@ function EmitirCombo({ numero }: { numero: string }) {
     cramo, cplan, apartamento: c.apartamento, valida: !!r?.valida, documento: c.documento,
     sinTarifa: r ? coberturasSinTarifa(r.catalogo, r.cot) : [],
     primaTotal: r?.cot.prima_total,
+    direccion: c.ubicacion,
   });
 
   useEffect(() => { void cargarContenedores(); }, [cargarContenedores]);
@@ -620,7 +621,7 @@ function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerid
   const faltan = [
     ...(catalogo?.error ? [`No se pudieron verificar las coberturas del ramo en Sis2000: ${catalogo.error}`] : []),
     ...(!catalogo?.coberturas && !catalogo?.error ? ['Verificando las coberturas del ramo en Sis2000…'] : []),
-    ...faltantesEmisionRc({ emision, valida, documento: c.documento, cplan, apartamento: c.apartamento }),
+    ...faltantesEmisionRc({ emision, valida, documento: c.documento, cplan, apartamento: c.apartamento, direccion: c.ubicacion }),
   ];
   const m = (n: number) => `${moneda} ${importe(n)}`;
   const nombreSis = (ccober: string) => catalogo?.coberturas?.find((x) => x.ccober === ccober)?.nombre;
