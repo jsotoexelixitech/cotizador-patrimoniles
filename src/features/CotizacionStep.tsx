@@ -17,7 +17,7 @@ import { RAMO_RCG, primasTarifaRcg } from '../tarifas/planes-rcg';
 import { sumaDe } from '../tarifas/coberturas';
 import { esRamoCoberturas, useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
-import { coberturasSinTarifa, sinTarifa, type PrimaTecnica } from '../tarifas/combo';
+import { coberturasOtraMoneda, coberturasSinTarifa, monedaBaseCombo, monedaCobertura, sinTarifa, type PrimaTecnica } from '../tarifas/combo';
 import { NOMBRE_COTIZADOR, type TarifaOficial } from '../tarifas/combo-rc';
 import { toast } from '../store/toastStore';
 import { AvisoMesaTecnica, CamposClaseRc, CamposClaseRcg, CamposNominaRc } from './RiesgoStep';
@@ -422,6 +422,9 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
   const fuente = oficial ? `Tarifa oficial (cotizador ${NOMBRE_COTIZADOR[oficial.cotizador]})` : '';
   const totalSinTarifa = oficial ? 0 : catalogo.filter(sinTarifa).length;
   const incluidasSinTarifa = coberturasSinTarifa(catalogo, cot);
+  // Una póliza va en una sola moneda: la de la básica.
+  const monedaBase = monedaBaseCombo(catalogo);
+  const incluidasOtraMoneda = coberturasOtraMoneda(catalogo, cot);
   // Sin tarifa oficial, la tasa se puede crear aquí para esta cotización (se emite con ella).
   const verTasa = vistaTecnica || !oficial;
   return (
@@ -454,7 +457,9 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
               const limites = oficial ? '' : topes(c.msumamin, c.msumamax);
               const sinTar = !oficial && sinTarifa(c);
               // Solo la básica y las obligatorias no se desmarcan; cualquier otra se puede marcar, con o sin tarifa.
-              const bloqueada = c.obligatoria || esBasicaOficial;
+              // Otra moneda que la básica: no se puede marcar (sí desmarcar si ya estaba elegida).
+              const otraMon = monedaCobertura(c) !== monedaBase;
+              const bloqueada = c.obligatoria || esBasicaOficial || (otraMon && !marcada);
               const tec = tecnico[c.ccober] ?? {};
               return (
                 <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !activa && 'text-slate-400', esBasicaOficial && 'bg-indigo-50/50')}>
@@ -467,6 +472,11 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
                         <span className="shrink-0 rounded-full border border-indigo-200 bg-indigo-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-indigo-700">{fuente}</span>
                       )}
                       {oficial && !esBasicaOficial && marcada && <span className="shrink-0 text-[0.68rem] text-slate-400">Incluida · prima en la básica</span>}
+                      {otraMon && (
+                        <span className="shrink-0 rounded-full border border-rose-200 bg-rose-50 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-rose-700" title={`Cobertura en ${monedaCobertura(c)}: la póliza va en ${monedaBase}, la moneda de la básica.`}>
+                          En {monedaCobertura(c)} · otra moneda
+                        </span>
+                      )}
                       {sinTar && (
                         <span className="shrink-0 rounded-full border border-slate-200 bg-slate-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-slate-600">
                           Tarifa de Técnico
@@ -506,6 +516,13 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
       </div>
       {/* Los errores de los datos de tarifa oficial se ven en su tarjeta; aquí, los demás al intentar continuar. */}
       {intento && cot.generales.filter((g) => !oficial?.errores.includes(g)).map((g) => <div key={g} className="mt-3"><Aviso tono="error">{g}</Aviso></div>)}
+      {incluidasOtraMoneda.length > 0 && (
+        <div className="mt-3">
+          <Aviso tono="error">
+            La póliza va en {monedaBase} (la moneda de la básica). Desmarca las coberturas en otra moneda: {incluidasOtraMoneda.join(', ')}.
+          </Aviso>
+        </div>
+      )}
       {incluidasSinTarifa.length > 0 && (
         <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-3 text-[0.78rem] text-slate-600">
           Sin tasa en Sis2000: <strong>{incluidasSinTarifa.join(', ')}</strong>. Escribe la <strong>tasa %</strong> en la columna «Tasa %» de cada una

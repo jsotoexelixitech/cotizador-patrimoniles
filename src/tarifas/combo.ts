@@ -80,6 +80,31 @@ export const monedaCombo = (catalogo: CoberturaRamo[]) => {
   return !m || m === '$' ? 'USD' : m;
 };
 
+/** Moneda normalizada de una cobertura de Sis2000 ('$' → USD; Bs/VES → BS; €/EUR → EUR). */
+export function monedaCobertura(c: { cmoneda: string }): string {
+  const m = (c.cmoneda ?? '').trim().toUpperCase();
+  if (!m || m === '$' || m === 'USD' || m === 'US$') return 'USD';
+  if (m === 'BS' || m === 'BS.' || m === 'VES' || m === 'BSD' || m === 'BSF') return 'BS';
+  if (m === '€' || m === 'EUR') return 'EUR';
+  return m;
+}
+
+/** Moneda del combo = la de la básica ('1'); si no hay básica, la de la primera obligatoria o la primera cobertura. */
+export function monedaBaseCombo(catalogo: CoberturaRamo[]): string {
+  const base = catalogo.find((c) => c.ccober === '1') ?? catalogo.find((c) => c.obligatoria) ?? catalogo[0];
+  return base ? monedaCobertura(base) : 'USD';
+}
+
+/** Coberturas del combo en otra moneda que la base: Sis2000 no emite una póliza con monedas mezcladas. */
+export function coberturasOtraMoneda(catalogo: CoberturaRamo[], cot: CotizacionCoberturas): string[] {
+  const base = monedaBaseCombo(catalogo);
+  const porCob = new Map(catalogo.map((c) => [c.ccober, c]));
+  return cot.coberturas.filter((c) => {
+    const t = porCob.get(c.ccober);
+    return !!t && monedaCobertura(t) !== base;
+  }).map((c) => c.nombre);
+}
+
 const fmt = (n: number) => n.toLocaleString('es-VE');
 
 /**
@@ -184,6 +209,8 @@ export function faltantesEmisionCombo(x: {
   primaTotal?: number;
   /** Ubicación del riesgo (direccion_riesgo): obligatoria en la emisión. Sin el campo no se valida (compatibilidad). */
   direccion?: string;
+  /** Coberturas en otra moneda que la básica (no se emiten juntas). */
+  otraMoneda?: string[];
 }): string[] {
   const f: string[] = [];
   if (!x.valida) f.push('Revisa las coberturas y sumas en el paso de cotización.');
@@ -196,6 +223,11 @@ export function faltantesEmisionCombo(x: {
   const rif = x.documento.replace(/\D/g, '');
   if (!rif || rif.length > 9) f.push('Indica el RIF o la cédula del tomador (hasta 9 dígitos) en el paso del tomador.');
   if (x.direccion !== undefined && !x.direccion.trim()) f.push(FALTA_DIRECCION);
+  if (x.otraMoneda?.length) {
+    const n = x.otraMoneda;
+    const lista = n.length > 5 ? `${n.slice(0, 5).join(', ')} y ${n.length - 5} más` : n.join(', ');
+    f.push(`Quita las coberturas en otra moneda (${lista}): una póliza va en una sola moneda, la de la básica.`);
+  }
   if (!x.cplan.trim()) f.push('Elige el plan contenedor.');
   if (pideUnidad(x.cramo) && !(Number(x.apartamento) > 0)) f.push(`En el ramo ${x.cramo} indica el número de apartamento o unidad.`);
   return f;

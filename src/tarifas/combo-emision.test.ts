@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { armarEmisionCombo, coberturasSinTarifa, cotizarCombo, faltantesEmisionCombo, parsearCoberturasRamo, pideUnidad, planesContenedor, sinTarifa } from './combo';
+import { armarEmisionCombo, coberturasOtraMoneda, coberturasSinTarifa, cotizarCombo, faltantesEmisionCombo, monedaBaseCombo, monedaCobertura, parsearCoberturasRamo, pideUnidad, planesContenedor, sinTarifa } from './combo';
 import { parsearCatalogo } from './planes-rcg';
 
 const cob = (ccober: string, xcobertura: string, pprima: number, extra = {}) =>
@@ -77,5 +77,20 @@ describe('combo: coberturas sin tarifa en Sis2000', () => {
     const cot = cotizarCombo(catalogo, { '1': '1000' });
     expect(coberturasSinTarifa(catalogo, cot)).toEqual([]);
     expect(faltantesEmisionCombo({ cramo: 27, cplan: 'P2', apartamento: '', valida: true, documento: 'J-12345678-9', sinTarifa: [], primaTotal: cot.prima_total })).toEqual([]);
+  });
+});
+
+describe('combo: una sola moneda (la de la básica)', () => {
+  const mix = parsearCoberturasRamo({ status: true, data: { cramo: 16, coberturas: [
+    cob('1', 'BÁSICA', 0.5), cob('2', 'TERREMOTO', 0.1), cob('30', 'BÁSICA BS', 0.5, { cmoneda: 'BS' }), cob('40', 'BÁSICA EUR', 0.5, { cmoneda: 'EUR' }),
+  ] } });
+  it('detecta las coberturas en otra moneda y bloquea la emisión', () => {
+    expect(monedaBaseCombo(mix)).toBe('USD');
+    expect(monedaCobertura({ cmoneda: '$' })).toBe('USD');
+    const cot = cotizarCombo(mix, { '1': '1000', '2': '500', '30': '100', '40': '100' });
+    expect(coberturasOtraMoneda(mix, cot)).toEqual(['BÁSICA BS', 'BÁSICA EUR']);
+    const f = faltantesEmisionCombo({ cramo: 16, cplan: '1', apartamento: '', valida: true, documento: '123456789', otraMoneda: ['BÁSICA BS', 'BÁSICA EUR'] });
+    expect(f).toEqual(['Quita las coberturas en otra moneda (BÁSICA BS, BÁSICA EUR): una póliza va en una sola moneda, la de la básica.']);
+    expect(coberturasOtraMoneda(mix, cotizarCombo(mix, { '1': '1000', '2': '500' }))).toEqual([]);
   });
 });

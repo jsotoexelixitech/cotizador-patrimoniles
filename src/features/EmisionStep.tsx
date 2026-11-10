@@ -22,7 +22,7 @@ import { useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
 import { Field, Input, Select } from '../components/ui/FormField';
 import {
-  armarEmisionCombo, armarEmisionComboInformada, coberturasSinTarifa, conPrimaTecnica, faltantesEmisionCombo, pideUnidad, planesContenedor,
+  armarEmisionCombo, armarEmisionComboInformada, coberturasOtraMoneda, coberturasSinTarifa, conPrimaTecnica, faltantesEmisionCombo, pideUnidad, planesContenedor,
 } from '../tarifas/combo';
 import { armarEmisionInformada, coberturasRc, coberturasRcg, faltantesEmisionRc, type CoberturasEmision } from '../tarifas/emision-rc';
 import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
@@ -373,6 +373,7 @@ function EmitirCombo({ numero }: { numero: string }) {
     sinTarifa: r ? coberturasSinTarifa(r.catalogo, r.cot) : [],
     primaTotal: r?.cot.prima_total,
     direccion: c.ubicacion,
+    otraMoneda: r ? coberturasOtraMoneda(r.catalogo, r.cot) : [],
   });
 
   useEffect(() => { void cargarContenedores(); }, [cargarContenedores]);
