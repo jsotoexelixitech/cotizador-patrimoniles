@@ -11,6 +11,7 @@ import { detalleRamo, filtrarRamos, RAMO_NO_EXISTE, ramoDeBusqueda, seleccionabl
 import { useCotizacionStore, type Producto } from '../store/cotizacionStore';
 import { useNombreRamo } from '../store/comboHook';
 import { usePlanesStore } from '../store/planesStore';
+import { planesContenedor } from '../tarifas/combo';
 import { toast } from '../store/toastStore';
 import type { Modo } from '../tarifas/rcp-rce';
 
@@ -200,6 +201,8 @@ function comboListo(): boolean {
 
 const plural = (n: number, una: string, varias: string) => `${n} ${n === 1 ? una : varias}`;
 
+type FiltroPlan = 'todos' | 'con' | 'sin';
+
 /**
  * Combo: el ramo se busca por nombre o número y solo se elige de la lista de Sis2000 (riesgos-generales/ramos, o los
  * ramos con planes si ese nest-api aún no tiene la ruta); al elegirlo se consultan todas sus coberturas vigentes.
@@ -217,8 +220,23 @@ function RamoCombo() {
   const xramo = useNombreRamo(ramoCombo);
   const [busqueda, setBusqueda] = useState('');
   const [aviso, setAviso] = useState<string | null>(null);
+  // Plan contenedor: sin un plan vigente del ramo en Sis2000 el combo se cotiza pero no se emite.
+  const contenedores = usePlanesStore((s) => s.contenedores);
+  const cargarContenedores = usePlanesStore((s) => s.cargarContenedores);
+  const [filtroPlan, setFiltroPlan] = useState<FiltroPlan>('todos');
+  const planesDe = (cramo: number) => (contenedores ? planesContenedor(contenedores, cramo).length : null);
   const ramos = useMemo(() => lista ?? [], [lista]);
-  const resultados = useMemo(() => filtrarRamos(ramos, busqueda), [ramos, busqueda]);
+  const resultados = useMemo(() => {
+    const r = filtrarRamos(ramos, busqueda);
+    if (filtroPlan === 'todos' || !contenedores) return r;
+    return r.filter((x) => (planesContenedor(contenedores, x.cramo).length > 0) === (filtroPlan === 'con'));
+  }, [ramos, busqueda, filtroPlan, contenedores]);
+  const conPlan = useMemo(
+    () => (contenedores ? ramos.filter((x) => planesContenedor(contenedores, x.cramo).length > 0).length : 0),
+    [ramos, contenedores],
+  );
+
+  useEffect(() => { void cargarContenedores(); }, [cargarContenedores]);
   // Lo escrito no coincide con ningún ramo de la lista: solo se avisa, no se consulta nada.
   const sinCoincidencias = ramos.length > 0 && busqueda.trim() !== '' && resultados.length === 0;
   const mensaje = sinCoincidencias ? RAMO_NO_EXISTE : aviso;
@@ -268,6 +286,22 @@ function RamoCombo() {
         />
       </div>
       <p className="mt-1.5 text-[0.72rem] text-slate-500">Escribe parte del nombre o el número del ramo; Enter elige el primero de la lista.</p>
+      {contenedores && ramos.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {([
+            ['todos', `Todos (${ramos.length})`],
+            ['con', `Con plan · emiten (${conPlan})`],
+            ['sin', `Sin plan · solo cotizan (${ramos.length - conPlan})`],
+          ] as [FiltroPlan, string][]).map(([id, txt]) => (
+            <button key={id} type="button" aria-pressed={filtroPlan === id} onClick={() => setFiltroPlan(id)}
+              className={cn('px-3 py-1 rounded-full text-[0.72rem] font-bold border transition-all',
+                filtroPlan === id ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400')}>
+              {txt}
+            </button>
+          ))}
+          <span className="text-[0.7rem] text-slate-500">Para emitir, Sis2000 necesita un plan vigente del ramo (como Condominio, que emite con su único plan y las coberturas elegidas).</span>
+        </div>
+      )}
       {cargandoRamos && <p className="mt-3 flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Consultando los ramos de Sis2000…</p>}
       {errorRamos && (
         <div className="mt-3 space-y-3">
@@ -298,6 +332,13 @@ function RamoCombo() {
                 )}
               >
                 {r.xramo} <span className="font-normal opacity-75">· {detalleRamo(r)}</span>
+                {planesDe(r.cramo) != null && (
+                  <span className={cn('ml-2 rounded-full px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide border',
+                    ramoCombo === r.cramo ? 'border-white/40 text-white'
+                      : planesDe(r.cramo) ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-slate-300 bg-slate-50 text-slate-500')}>
+                    {planesDe(r.cramo) ? plural(planesDe(r.cramo) ?? 0, 'plan', 'planes') : 'sin plan'}
+                  </span>
+                )}
               </button>
             );
           })}
