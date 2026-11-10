@@ -37,6 +37,9 @@ async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'c
     throw new Error(typeof m === 'string' && m && !/^Cannot GET/i.test(m) ? m : 'La ruta de coberturas por ramo aún no está desplegada en este ambiente.');
   }
   if (res.status === 403 && url.includes('riesgos-generales/emision')) {
+    // Modo cotizador (prima informada): apagado en el ambiente o key sin el scope explícito; el mensaje de nest-api lo dice.
+    const m = (data as { message?: unknown } | null)?.message;
+    if (typeof m === 'string' && /riesgos-generales-prima|RIESGOS_GENERALES_EMISION_COTIZADOR/.test(m)) throw new Error(m);
     throw new Error('La key del cotizador no tiene el permiso emissions:riesgos-generales: hay que agregárselo en nest-api.');
   }
   if (res.status === 401 || res.status === 403) throw new Error('nest-api rechazó la key (NEST_API_KEY en .env.local o scope del partner patrimonial).');

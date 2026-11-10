@@ -33,7 +33,16 @@ npm run build    # dist/ ; VITE_APP_BASE=/cotizador-rc/ para servirlo bajo subpa
   del cotizador en nest-api; si responde 404, el ambiente aún no la tiene). Motor puro en `src/tarifas/combo.ts`.
 - Obligatorias siempre incluidas; adicionales a elección. Cada una con su suma dentro de mín./máx. (0 = sin tope) y ninguna
   adicional por encima de la básica ('1'). Prima = suma × tasa / 100, o la prima fija si no hay tasa; total = suma de primas.
-- Solo cotiza: para emitirlo, el combo debe existir como plan en Sis2000 (Product Builder → Combos de coberturas).
+- Coberturas sin tarifa en Sis2000 (a propósito: «Tarifa la aplica Técnico»): con la vista técnica se eligen y se escribe su
+  tasa % o su prima; el combo se emite entonces con prima informada (nest-api `modo: cotizador`). Sin vista técnica no se emiten.
+
+## Emisión con la prima del cotizador (RCG, RCP, RCE)
+
+- Solo QA y con `VITE_RC_EMITIR=1` en `.env.local`. POST `riesgos-generales/emision` en `modo: cotizador`: nest-api valida y no
+  recalcula (requiere `RIESGOS_GENERALES_EMISION_COTIZADOR=true` y la key con `emissions:riesgos-generales-prima`).
+- Coberturas: `src/tarifas/data/mapeo-sis2000.ts` (concepto → ccober por moneda; las dudosas marcadas). Toda la prima va en la
+  básica, salvo las adicionales por empleado de RCP/RCE; los sublímites van con prima 0. Motor en `src/tarifas/emision-rc.ts`.
+- Plan contenedor: un plan vigente del ramo (RCG sugiere PLANI / PLANII / PLAN3 según la opción).
 
 ## Vista técnica
 

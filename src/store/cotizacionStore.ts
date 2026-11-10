@@ -7,6 +7,7 @@ import {
   cotizarRc, opcionalesDe, type BaseNomina, type IdOpcion, type Modo, type MonedaRc, type ProductoEntrada, type SolicitudRc,
 } from '../tarifas/rcp-rce';
 import { useParametrosStore } from './parametrosStore';
+import type { PrimaTecnica } from '../tarifas/combo';
 
 /**
  * planes = planes de riesgos generales de Sis2000 (en el ramo 28, con las reglas del RCG);
@@ -43,6 +44,8 @@ export interface CotizacionState {
   /** Combo: ramo elegido y el combo armado en cada ramo (ccober → suma escrita; las obligatorias entran siempre). */
   ramoCombo: number | null;
   combos: Record<number, Record<string, string>>;
+  /** Combo con vista técnica: tasa o prima de Técnico para las coberturas sin tarifa (cramo → ccober → valores). */
+  tecnicoCombo: Record<number, Record<string, PrimaTecnica>>;
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
     claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
@@ -58,6 +61,7 @@ export interface CotizacionState {
   setCoberturas: (c: Partial<CotizacionState['coberturas']>) => void;
   setRamoCombo: (cramo: number) => void;
   setCombo: (cramo: number, elegidas: Record<string, string>) => void;
+  setTecnicoCombo: (cramo: number, ccober: string, v: PrimaTecnica) => void;
   reset: () => void;
 }
 
@@ -78,6 +82,7 @@ const inicial = () => ({
   coberturas: { sumas: {} as Record<string, string>, elegidas: null as string[] | null },
   ramoCombo: null as number | null,
   combos: {} as Record<number, Record<string, string>>,
+  tecnicoCombo: {} as Record<number, Record<string, PrimaTecnica>>,
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
     claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
@@ -97,6 +102,9 @@ export const useCotizacionStore = create<CotizacionState>((set) => ({
   setCoberturas: (c) => set((s) => ({ coberturas: { ...s.coberturas, ...c } })),
   setRamoCombo: (ramoCombo) => set({ ramoCombo }),
   setCombo: (cramo, elegidas) => set((s) => ({ combos: { ...s.combos, [cramo]: elegidas } })),
+  setTecnicoCombo: (cramo, ccober, v) => set((s) => ({
+    tecnicoCombo: { ...s.tecnicoCombo, [cramo]: { ...(s.tecnicoCombo[cramo] ?? {}), [ccober]: { ...(s.tecnicoCombo[cramo]?.[ccober] ?? {}), ...v } } },
+  })),
   reset: () => set(inicial()),
 }));
 

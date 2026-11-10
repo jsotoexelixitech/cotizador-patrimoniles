@@ -46,13 +46,31 @@ export function parsearCoberturasRamo(body: unknown): CoberturaRamo[] {
 /** Sin tarifa en Sis2000: ni tasa (pprima) ni prima fija (mprima). Su prima sería 0: no se puede emitir con ella. */
 export const sinTarifa = (c: { pprima: number; mprima: number }) => !(c.pprima > 0) && !(c.mprima > 0);
 
-/** Nombres de las coberturas del combo (elegidas u obligatorias) que no tienen tarifa en Sis2000. */
+/**
+ * Nombres de las coberturas del combo (elegidas u obligatorias) sin tarifa en Sis2000 que todavía no tienen prima:
+ * Técnico no les escribió tasa ni prima (> 0) en la vista técnica.
+ */
 export function coberturasSinTarifa(catalogo: CoberturaRamo[], cot: CotizacionCoberturas): string[] {
   const porCob = new Map(catalogo.map((c) => [c.ccober, c]));
   return cot.coberturas.filter((c) => {
     const t = porCob.get(c.ccober);
-    return t ? sinTarifa(t) : false;
+    return t ? sinTarifa(t) && !(c.tecnica && c.prima > 0) : false;
   }).map((c) => c.nombre);
+}
+
+/** Tasa (%) o prima que escribe Técnico para una cobertura sin tarifa; si hay prima, manda la prima. */
+export interface PrimaTecnica { tasa?: string; prima?: string }
+
+/** El combo lleva alguna prima fijada por Técnico: se emite con prima informada (nest-api modo cotizador). */
+export const conPrimaTecnica = (cot: CotizacionCoberturas) => cot.coberturas.some((c) => c.tecnica);
+
+/** Prima de Técnico para una suma: la prima escrita o suma × tasa / 100. null = no escribió nada; NaN = valor inválido. */
+export function primaTecnica(t: PrimaTecnica | undefined, suma: number): number | null {
+  const prima = t?.prima?.trim() ?? '';
+  const tasa = t?.tasa?.trim() ?? '';
+  if (prima !== '') { const n = Number(prima); return Number.isFinite(n) && n >= 0 ? redondear(n) : NaN; }
+  if (tasa !== '') { const n = Number(tasa); return Number.isFinite(n) && n >= 0 ? redondear((suma * n) / 100) : NaN; }
+  return null;
 }
 
 /** Moneda del combo para mostrar: la de sus coberturas en Sis2000 ('$' = USD). */
@@ -67,7 +85,11 @@ const fmt = (n: number) => n.toLocaleString('es-VE');
  * Cotiza el combo: `elegidas` = ccober → suma escrita. Las obligatorias entran siempre (sin suma, con error).
  * Prima = suma × tasa / 100 o la prima fija; ninguna adicional puede superar la suma de la básica ('1').
  */
-export function cotizarCombo(catalogo: CoberturaRamo[], elegidas: Record<string, string>): CotizacionCoberturas {
+export function cotizarCombo(
+  catalogo: CoberturaRamo[], elegidas: Record<string, string>,
+  /** Solo con la vista técnica: tasa o prima de Técnico para las coberturas sin tarifa (ccober → valores). */
+  tecnico?: Record<string, PrimaTecnica>,
+): CotizacionCoberturas {
   const errores: Record<string, string> = {};
   const coberturas = catalogo
     .filter((c) => c.obligatoria || elegidas[c.ccober] !== undefined)
@@ -77,6 +99,13 @@ export function cotizarCombo(catalogo: CoberturaRamo[], elegidas: Record<string,
       if (!(suma > 0)) errores[c.ccober] = 'La suma debe ser mayor a 0.';
       else if (c.msumamin > 0 && suma < c.msumamin) errores[c.ccober] = `Mínimo ${fmt(c.msumamin)}.`;
       else if (c.msumamax > 0 && suma > c.msumamax) errores[c.ccober] = `Máximo ${fmt(c.msumamax)}.`;
+      // Sin tarifa en Sis2000: la tarifa la aplica Técnico (tasa o prima escrita en la vista técnica).
+      const tec = tecnico && sinTarifa(c) ? primaTecnica(tecnico[c.ccober], suma > 0 ? suma : 0) : null;
+      if (tec !== null && Number.isNaN(tec) && !errores[c.ccober]) errores[c.ccober] = 'La tasa o la prima de Técnico no es válida.';
+      if (tec !== null && !Number.isNaN(tec)) {
+        const tasa = tecnico?.[c.ccober]?.prima?.trim() ? (suma > 0 ? redondear((tec * 100 / suma) * 1e4) / 1e4 : 0) : Number(tecnico?.[c.ccober]?.tasa);
+        return { ccober: c.ccober, nombre: c.nombre, tasa, suma, prima: suma > 0 ? tec : 0, tecnica: true };
+      }
       const prima = !(suma > 0) ? 0 : c.pprima > 0 ? redondear((suma * c.pprima) / 100) : c.mprima;
       return { ccober: c.ccober, nombre: c.nombre, tasa: c.pprima, suma, prima };
     });
@@ -124,7 +153,7 @@ export function faltantesEmisionCombo(x: {
   if (x.sinTarifa?.length) {
     const n = x.sinTarifa;
     const lista = n.length > 5 ? `${n.slice(0, 5).join(', ')} y ${n.length - 5} más` : n.join(', ');
-    f.push(`Sin tarifa en Sis2000 (sin tasa ni prima fija): ${lista}. No se puede emitir con esas coberturas hasta que La Mundial cargue su tarifa.`);
+    f.push(`La tarifa la aplica Técnico: falta la tasa o la prima de ${lista}. Escríbela con la vista técnica (Parámetros) para poder emitir.`);
   }
   if (x.primaTotal !== undefined && !(x.primaTotal > 0)) f.push('La prima total del combo es 0: no se puede emitir una póliza sin prima.');
   const rif = x.documento.replace(/\D/g, '');
@@ -144,5 +173,23 @@ export function armarEmisionCombo(x: DatosEmisionCoberturas & { catalogo: Cobert
     ...armarEmisionCoberturas(x),
     modo: 'combo' as const,
     coberturas: x.cot.coberturas.map((c) => ({ ccober: c.ccober, ...(tarifa.get(c.ccober) ? { ctarifa: tarifa.get(c.ccober) } : {}), suma: c.suma })),
+  };
+}
+
+/**
+ * Combo con primas de Técnico: body en `modo: cotizador` con la suma y la prima de cada cobertura (las de tarifa de
+ * Sis2000 con la misma regla de la cotización) y la prima total = suma de las primas. nest-api valida y no recalcula.
+ */
+export function armarEmisionComboInformada(x: DatosEmisionCoberturas & { catalogo: CoberturaRamo[]; ncotizacion: string }) {
+  const tarifa = new Map(x.catalogo.map((c) => [c.ccober, c.ctarifa]));
+  return {
+    ...armarEmisionCoberturas(x),
+    modo: 'cotizador' as const,
+    cotizador: 'combo' as const,
+    ncotizacion: x.ncotizacion.trim().slice(0, 40),
+    prima_total: redondear(x.cot.coberturas.reduce((s, c) => s + c.prima, 0)),
+    coberturas: x.cot.coberturas.map((c) => ({
+      ccober: c.ccober, ...(tarifa.get(c.ccober) ? { ctarifa: tarifa.get(c.ccober) } : {}), suma: c.suma, prima: c.prima,
+    })),
   };
 }

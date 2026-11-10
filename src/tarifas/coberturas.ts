@@ -19,7 +19,11 @@ export interface CoberturaTarifa {
 }
 export interface PlanTarifa { cplan: string; xplan: string; cmoneda: string; coberturas: CoberturaTarifa[] }
 
-export interface CoberturaCotizada { ccober: string; nombre: string; tasa: number; suma: number; prima: number }
+export interface CoberturaCotizada {
+  ccober: string; nombre: string; tasa: number; suma: number; prima: number;
+  /** Combo: cobertura sin tarifa en Sis2000 cuya tasa o prima escribió Técnico (vista técnica). */
+  tecnica?: boolean;
+}
 export interface CotizacionCoberturas {
   suma_asegurada: number; prima_total: number; coberturas: CoberturaCotizada[];
   /** Errores por cobertura (ccober → mensaje) y generales. */

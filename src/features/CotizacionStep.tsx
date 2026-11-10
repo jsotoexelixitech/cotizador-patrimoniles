@@ -17,7 +17,7 @@ import { RAMO_RCG, primasTarifaRcg } from '../tarifas/planes-rcg';
 import { sumaDe } from '../tarifas/coberturas';
 import { esRamoCoberturas, useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
-import { coberturasSinTarifa, sinTarifa } from '../tarifas/combo';
+import { coberturasSinTarifa, sinTarifa, type PrimaTecnica } from '../tarifas/combo';
 import { toast } from '../store/toastStore';
 import { AvisoMesaTecnica } from './RiesgoStep';
 
@@ -399,8 +399,14 @@ function CotizacionCombo() {
 }
 
 /** Mismo aspecto que CoberturasElegibles: obligatorias fijas, adicionales con casilla y suma escrita por cobertura. */
+/** Sin valores de Técnico en el ramo: constante para que el selector devuelva siempre la misma referencia. */
+const SIN_TECNICO: Record<string, PrimaTecnica> = {};
+
 function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotizacionCombo>>; intento: boolean }) {
   const setCombo = useCotizacionStore((s) => s.setCombo);
+  const setTecnico = useCotizacionStore((s) => s.setTecnicoCombo);
+  // Selector con referencia estable: un {} nuevo en cada render hace que zustand re-renderice sin fin.
+  const tecnico = useCotizacionStore((s) => s.tecnicoCombo[r.cramo]) ?? SIN_TECNICO;
   const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
   const xramo = useNombreRamo(r.cramo);
   const { cramo, catalogo, elegidas, cot, moneda } = r;
@@ -410,14 +416,14 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
     setCombo(cramo, v ? { ...elegidas, [ccober]: '' } : Object.fromEntries(Object.entries(elegidas).filter(([k]) => k !== ccober)));
 
   if (!catalogo.length) return <Aviso>{xramo} no tiene coberturas con tarifa vigente en Sis2000.</Aviso>;
-  // Sin tasa ni prima fija en Sis2000: se marcan en la tabla; las opcionales no se pueden elegir y, si una
-  // obligatoria no tiene tarifa, el combo se puede cotizar pero no emitir.
+  // Sin tasa ni prima fija en Sis2000 a propósito: la tarifa la aplica Técnico. Con la vista técnica se elige la
+  // cobertura y se escribe su tasa o su prima; sin ella, las opcionales no se pueden elegir y el combo no se emite.
   const totalSinTarifa = catalogo.filter(sinTarifa).length;
   const incluidasSinTarifa = coberturasSinTarifa(catalogo, cot);
   return (
     <SectionCard title={`Arma el combo · ${xramo}`} Icon={ListChecks} statusLabel={`Ramo ${cramo}`}
       description={vistaTecnica
-        ? 'Marca las coberturas y escribe su suma. La prima de cada una es su suma × su tasa de Sis2000, o su prima fija.'
+        ? 'Marca las coberturas y escribe su suma. La prima de cada una es su suma × su tasa de Sis2000, o su prima fija; en las que aplica Técnico, escribe la tasa o la prima.'
         : 'Marca las coberturas y escribe su suma asegurada. Se muestra solo la prima total del combo.'}>
       <div className="overflow-x-auto rounded-xl border border-slate-200">
         <table className="w-full text-[0.78rem]">
@@ -439,17 +445,18 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
               const limites = topes(c.msumamin, c.msumamax);
               const sinTar = sinTarifa(c);
               // Una opcional sin tarifa no se puede marcar (sí desmarcar si ya estaba elegida).
-              const bloqueada = c.obligatoria || (sinTar && !marcada);
+              const bloqueada = c.obligatoria || (sinTar && !marcada && !vistaTecnica);
+              const tec = tecnico[c.ccober] ?? {};
               return (
                 <tr key={c.ccober} className={cn('border-t border-slate-100 align-top', !marcada && 'text-slate-400', sinTar && 'bg-amber-50/60')}>
                   <td className="px-3 py-2">
                     <label className={cn('flex items-center gap-2', bloqueada ? 'cursor-default' : 'cursor-pointer')}
-                      title={sinTar ? 'Sin tasa ni prima fija en Sis2000 (matarifa_d): no se puede emitir con esta cobertura.' : undefined}>
+                      title={sinTar ? 'Sin tarifa en Sis2000: la aplica Técnico. Con la vista técnica (Parámetros) se escribe la tasa o la prima.' : undefined}>
                       <input type="checkbox" className="w-4 h-4 accent-indigo-600" checked={marcada} disabled={bloqueada} onChange={(e) => alternar(c.ccober, e.target.checked)} />
                       <span className={marcada ? 'text-slate-700' : ''}>{c.nombre}{c.obligatoria ? ' · obligatoria' : ''}</span>
                       {sinTar && (
                         <span className="shrink-0 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-px text-[0.62rem] font-bold uppercase tracking-wide text-amber-800">
-                          Sin tarifa
+                          Tarifa la aplica Técnico
                         </span>
                       )}
                     </label>
@@ -462,8 +469,20 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
                     />
                     {(err || limites) && <p className={cn('text-[0.68rem] mt-0.5', err ? 'text-red-600' : 'text-slate-400')}>{err ?? limites}</p>}
                   </td>
-                  {vistaTecnica && <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{c.pprima > 0 ? porcentaje(c.pprima) : c.mprima > 0 ? 'Prima fija' : '—'}</td>}
-                  {vistaTecnica && <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>}
+                  {vistaTecnica && (sinTar && marcada ? (
+                    <td className="px-3 py-2 text-right">
+                      <input type="number" min={0} step="0.0001" value={tec.tasa ?? ''} placeholder="Tasa %" disabled={!!tec.prima?.trim()}
+                        onChange={(e) => setTecnico(cramo, c.ccober, { tasa: e.target.value })} title="Tasa de Técnico (%): prima = suma × tasa / 100"
+                        className="w-20 rounded-lg border border-amber-300 px-2 py-1 text-right tabular-nums disabled:bg-slate-50" />
+                    </td>
+                  ) : <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{c.pprima > 0 ? porcentaje(c.pprima) : c.mprima > 0 ? 'Prima fija' : '—'}</td>)}
+                  {vistaTecnica && (sinTar && marcada ? (
+                    <td className="px-3 py-2 text-right">
+                      <input type="number" min={0} step="0.01" value={tec.prima ?? ''} placeholder={x && x.prima > 0 ? importe(x.prima) : 'Prima'}
+                        onChange={(e) => setTecnico(cramo, c.ccober, { prima: e.target.value })} title="Prima de Técnico: si la escribes, manda sobre la tasa"
+                        className="w-24 rounded-lg border border-amber-300 px-2 py-1 text-right tabular-nums" />
+                    </td>
+                  ) : <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{marcada && x ? importe(x.prima) : '—'}</td>)}
                 </tr>
               );
             })}
@@ -474,13 +493,13 @@ function TablaCombo({ r, intento }: { r: NonNullable<ReturnType<typeof useCotiza
       {incluidasSinTarifa.length > 0 && (
         <div className="mt-3">
           <Aviso tono="error">
-            El combo lleva {incluidasSinTarifa.length === 1 ? 'una cobertura' : `${incluidasSinTarifa.length} coberturas`} sin tarifa en Sis2000 ({incluidasSinTarifa.join(', ')}): se puede cotizar, pero no emitir hasta que La Mundial cargue su tasa o prima fija.
+            El combo lleva {incluidasSinTarifa.length === 1 ? 'una cobertura' : `${incluidasSinTarifa.length} coberturas`} cuya tarifa aplica Técnico ({incluidasSinTarifa.join(', ')}): se puede cotizar, pero para emitir Técnico debe escribir su tasa o su prima (mayor a 0) con la vista técnica (Parámetros).
           </Aviso>
         </div>
       )}
       {totalSinTarifa > 0 && incluidasSinTarifa.length === 0 && (
         <p className="mt-3 text-[0.72rem] text-amber-700">
-          {totalSinTarifa === 1 ? 'Una cobertura' : `${totalSinTarifa} coberturas`} de {xramo} no {totalSinTarifa === 1 ? 'tiene' : 'tienen'} tarifa en Sis2000 (marcadas «Sin tarifa»): no se pueden elegir.
+          {totalSinTarifa === 1 ? 'Una cobertura' : `${totalSinTarifa} coberturas`} de {xramo} {totalSinTarifa === 1 ? 'lleva' : 'llevan'} la tarifa de Técnico (marcadas «Tarifa la aplica Técnico»): {vistaTecnica ? 'márcalas y escribe su tasa o su prima.' : 'se eligen con la vista técnica (Parámetros).'}
         </p>
       )}
       <div className="mt-4">

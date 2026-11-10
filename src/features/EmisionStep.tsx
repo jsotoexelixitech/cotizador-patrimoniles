@@ -21,7 +21,12 @@ import { armarEmisionCoberturas } from '../tarifas/coberturas';
 import { useCotizacionCoberturas } from '../store/coberturasHook';
 import { useCotizacionCombo, useNombreRamo } from '../store/comboHook';
 import { Field, Input, Select } from '../components/ui/FormField';
-import { armarEmisionCombo, coberturasSinTarifa, faltantesEmisionCombo, pideUnidad, planesContenedor } from '../tarifas/combo';
+import {
+  armarEmisionCombo, armarEmisionComboInformada, coberturasSinTarifa, conPrimaTecnica, faltantesEmisionCombo, pideUnidad, planesContenedor,
+} from '../tarifas/combo';
+import { armarEmisionInformada, coberturasRc, coberturasRcg, faltantesEmisionRc, type CoberturasEmision } from '../tarifas/emision-rc';
+import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
+import { emitirCoberturas } from '../api/patrimonial';
 import type { ResultadoEmision } from '../tarifas/planes-rcg';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
@@ -166,22 +171,7 @@ export function EmisionStep() {
 
       {rcg && <CondicionadosRcg coberturas={cotRcg.coberturas.map((x) => x.nombre)} moneda={s.rcg.moneda} />}
 
-      {planes ? <EmitirPlan /> : combo ? <EmitirCombo /> : (
-      <SectionCard title="Emisión de la póliza" Icon={Lock} statusLabel="Pendiente" statusTone="warning"
-        description="La emisión se conecta con Sis2000 al habilitar los planes del producto.">
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="primary" size="lg" disabled title="Pendiente de habilitar en Sis2000">
-            <FileCheck2 size={15} />
-            Emitir póliza
-          </Button>
-          <p className="text-[0.78rem] text-slate-500 max-w-md">
-            {rcg
-              ? 'RCG: ramo 28 · producto 89 (planes PLANI, PLANII y PLAN3). Falta que La Mundial habilite los planes del productor en Sis2000.'
-              : 'RCP / RCE: falta confirmar con La Mundial el ramo y producto en Sis2000.'}
-          </p>
-        </div>
-      </SectionCard>
-      )}
+      {planes ? <EmitirPlan /> : combo ? <EmitirCombo numero={numero} /> : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />}
 
       <p className="text-[0.72rem] text-slate-500">
         Cotización válida por {rcg || combo ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
@@ -363,7 +353,7 @@ function PolizaEmitida({ emision }: { emision: ResultadoEmision }) {
  * Combo: se emite con un plan vigente del ramo como contenedor (moneda, cplan y regla de duplicados de Sis2000) y las
  * coberturas y sumas elegidas (nest-api riesgos-generales/emision, modo combo). Solo QA y con VITE_RCG_PLANES_EMITIR=1.
  */
-function EmitirCombo() {
+function EmitirCombo({ numero }: { numero: string }) {
   const s = useCotizacionStore();
   const setComun = useCotizacionStore((x) => x.setComun);
   const r = useCotizacionCombo();
@@ -375,6 +365,8 @@ function EmitirCombo() {
   const cramo = r?.cramo ?? null;
   const planesRamo = planesContenedor(contenedores ?? [], cramo);
   const { comun: c, rcg } = s;
+  // Con primas de Técnico (vista técnica) se emite con prima informada: nest-api modo cotizador, no recalcula.
+  const informada = !!r && conPrimaTecnica(r.cot);
   const faltan = faltantesEmisionCombo({
     cramo, cplan, apartamento: c.apartamento, valida: !!r?.valida, documento: c.documento,
     sinTarifa: r ? coberturasSinTarifa(r.catalogo, r.cot) : [],
@@ -392,14 +384,15 @@ function EmitirCombo() {
   const emitirAhora = async () => {
     const plan = planesRamo.find((p) => p.cplan === cplan);
     const aviso = `Se emitirá en Sis2000 QA el combo de ${xramo} con el plan contenedor ${plan?.xplan ?? cplan} (${cplan}) `
-      + `por ${r.moneda} ${importe(r.cot.prima_total)} (nest-api recalcula la prima) a nombre de ${c.asegurado}. El recibo queda pendiente de cobro. ¿Continuar?`;
+      + `por ${r.moneda} ${importe(r.cot.prima_total)} (${informada ? 'prima con la tarifa de Técnico; nest-api no la recalcula' : 'nest-api recalcula la prima'}) a nombre de ${c.asegurado}. El recibo queda pendiente de cobro. ¿Continuar?`;
     if (!window.confirm(aviso)) return;
-    const em = await emitir(armarEmisionCombo({
+    const datos = {
       cramo: r.cramo, cplan, cot: r.cot, catalogo: r.catalogo, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
       apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
       bien: rcg.actividadEspecifica || c.asegurado, apartamento: pideUnidad(r.cramo) ? Number(c.apartamento) || undefined : undefined,
       cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
-    }), 'coberturas');
+    };
+    const em = await emitir(informada ? armarEmisionComboInformada({ ...datos, ncotizacion: numero.replace(/^RCG/, 'COMBO') }) : armarEmisionCombo(datos), 'coberturas');
     if (em) toast.success('Póliza emitida en QA', `${em.cnpoliza} · recibo ${em.cnrecibo || '—'}`);
   };
 
@@ -437,7 +430,9 @@ function EmitirCombo() {
           <p className="text-[0.78rem] text-slate-500 max-w-md">
             {!habilitada
               ? 'Para probar: VITE_RCG_PLANES_EMITIR=1 en .env.local (con NEST_API_URL de QA) y reiniciar npm run dev.'
-              : faltan.length ? faltan.join(' ') : 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. El ramo debe estar habilitado en nest-api (RIESGOS_GENERALES_RAMOS_EMISION).'}
+              : faltan.length ? faltan.join(' ') : informada
+                ? 'Opción de prueba con la tarifa de Técnico: la póliza queda con el recibo pendiente de cobro. En nest-api: RIESGOS_GENERALES_EMISION_COTIZADOR=true, el ramo en RIESGOS_GENERALES_COTIZADOR_RAMOS y la key con emissions:riesgos-generales-prima.'
+                : 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. El ramo debe estar habilitado en nest-api (RIESGOS_GENERALES_RAMOS_EMISION).'}
           </p>
         </div>
       </div>
@@ -548,5 +543,178 @@ function ResumenRc() {
       ))}
       <TotalRc total={m(cot.total)} detalle={`Nómina anual ${m(cot.nomina)}`} />
     </>
+  );
+}
+
+
+/** RCG (ramo 28): emite la opción elegida con su prima; plan contenedor sugerido PLANI / PLANII / PLAN3 si está vigente. */
+function EmitirRcg({ numero }: { numero: string }) {
+  const rcg = useCotizacionStore((x) => x.rcg);
+  const cot = useCotizacionRcg();
+  const catalogo = usePlanesStore((p) => p.catalogos[RAMOS_RC.rcg]?.coberturas ?? null);
+  const opcion = (cot.alternativas.find((a) => a.opcion === rcg.opcion) ?? cot.alternativas[0])?.opcion;
+  const emision = opcion ? coberturasRcg(cot, opcion, rcg.moneda, catalogo) : null;
+  return (
+    <EmitirInformada titulo={`Emitir RCG en Sis2000 QA${opcion ? ` · opción ${opcion}` : ''}`} emision={emision}
+      valida={!Object.keys(cot.errores).length && !!emision} ncotizacion={numero} moneda={rcg.moneda}
+      sugerido={opcion ? PLAN_RCG_POR_OPCION[opcion] : undefined}
+      bien={[rcg.indole, rcg.actividadEspecifica].filter(Boolean).join(' · ')} />
+  );
+}
+
+/** RCP (ramo 27) y RCE (ramo 37): una póliza por producto cotizado, con la opción elegida (USD/EUR) o la prima en Bs. */
+function EmitirRcpRce({ numero }: { numero: string }) {
+  const cot = useCotizacionRc();
+  const rc = useCotizacionStore((x) => x.rc);
+  const catalogos = usePlanesStore((p) => p.catalogos);
+  return (
+    <>
+      {cot.resultados.map((r) => {
+        const cotizador = r.k === 'p' ? 'rcp' : 'rce';
+        const emision = coberturasRc(r, rc.moneda, catalogos[RAMOS_RC[cotizador]]?.coberturas ?? null);
+        return (
+          <EmitirInformada key={r.k} titulo={`Emitir ${NOMBRES[r.k]} en Sis2000 QA${r.opcion ? ` · opción ${r.opcion}` : ''}`}
+            emision={emision} valida={!cot.errores.length} ncotizacion={numero.replace(/^RCG/, cotizador.toUpperCase())}
+            moneda={cot.simbolo} bien={[rc.indole, r.riesgo?.[0]].filter(Boolean).join(' · ')} />
+        );
+      })}
+    </>
+  );
+}
+
+/**
+ * Emisión con la prima del cotizador (nest-api riesgos-generales/emision, modo cotizador): Sis2000 no tiene tarifa en
+ * estos ramos, la aplica Técnico. Solo QA y con VITE_RC_EMITIR=1. Las coberturas salen de tarifas/data/mapeo-sis2000.ts.
+ */
+function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerido, bien }: {
+  titulo: string; emision: CoberturasEmision | null; valida: boolean; ncotizacion: string; moneda: string; sugerido?: string; bien: string;
+}) {
+  const c = useCotizacionStore((x) => x.comun);
+  const setComun = useCotizacionStore((x) => x.setComun);
+  const contenedores = usePlanesStore((p) => p.contenedores);
+  const cargandoContenedores = usePlanesStore((p) => p.cargandoContenedores);
+  const errorContenedores = usePlanesStore((p) => p.errorContenedores);
+  const cargarContenedores = usePlanesStore((p) => p.cargarContenedores);
+  const cargarCatalogo = usePlanesStore((p) => p.cargarCatalogo);
+  const cramo = emision?.cramo ?? null;
+  const catalogo = usePlanesStore((p) => (cramo == null ? undefined : p.catalogos[cramo]));
+  const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
+  const [cplan, setCplan] = useState('');
+  const [acepta, setAcepta] = useState(false);
+  const [emitiendo, setEmitiendo] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<ResultadoEmision | null>(null);
+  const habilitada = import.meta.env.VITE_RC_EMITIR === '1';
+  const planesRamo = planesContenedor(contenedores ?? [], cramo);
+  const xramo = useNombreRamo(cramo);
+
+  useEffect(() => { void cargarContenedores(); }, [cargarContenedores]);
+  useEffect(() => { if (cramo != null) void cargarCatalogo(cramo); }, [cramo, cargarCatalogo]);
+  // Plan sugerido (RCG: PLANI / PLANII / PLAN3 según la opción) o el único vigente del ramo.
+  const preferido = planesRamo.find((p) => p.cplan === sugerido)?.cplan ?? (planesRamo.length === 1 ? planesRamo[0].cplan : '');
+  useEffect(() => { setCplan(preferido); }, [cramo, preferido]);
+
+  if (resultado) return <PolizaEmitida emision={resultado} />;
+
+  const faltan = [
+    ...(catalogo?.error ? [`No se pudieron verificar las coberturas del ramo en Sis2000: ${catalogo.error}`] : []),
+    ...(!catalogo?.coberturas && !catalogo?.error ? ['Verificando las coberturas del ramo en Sis2000…'] : []),
+    ...faltantesEmisionRc({ emision, valida, documento: c.documento, cplan, apartamento: c.apartamento }),
+  ];
+  const m = (n: number) => `${moneda} ${importe(n)}`;
+  const nombreSis = (ccober: string) => catalogo?.coberturas?.find((x) => x.ccober === ccober)?.nombre;
+
+  const emitirAhora = async () => {
+    if (!emision) return;
+    const plan = planesRamo.find((p) => p.cplan === cplan);
+    const aviso = `Se emitirá en Sis2000 QA (ramo ${emision.cramo}, plan contenedor ${plan?.xplan ?? cplan} (${cplan})) por una prima total de `
+      + `${m(emision.primaTotal)}, la que calcula el cotizador (nest-api no la recalcula), a nombre de ${c.asegurado}. `
+      + 'El recibo queda pendiente de cobro. ¿Continuar?';
+    if (!window.confirm(aviso)) return;
+    setEmitiendo(true);
+    setError(null);
+    try {
+      const r = await emitirCoberturas(armarEmisionInformada({
+        cplan, emision, ncotizacion, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
+        apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
+        bien: bien || c.asegurado, apartamento: pideUnidad(emision.cramo) ? Number(c.apartamento) || undefined : undefined,
+        cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+      }));
+      setResultado(r);
+      toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEmitiendo(false);
+    }
+  };
+
+  return (
+    <SectionCard title={titulo} Icon={habilitada ? FileCheck2 : Lock}
+      description={`Prima del cotizador (en Sis2000 la tarifa de ${xramo || 'este ramo'} la aplica Técnico). Un plan vigente del ramo hace de contenedor.`}
+      statusLabel={habilitada ? 'Solo QA' : 'Deshabilitada'} statusTone="warning">
+      <div className="space-y-3">
+        {emision && emision.lineas.length > 0 && (
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="w-full text-[0.75rem]">
+              <thead className="bg-slate-50 text-slate-600">
+                <tr>
+                  <th className="text-left font-bold px-3 py-1.5">Cobertura del cotizador</th>
+                  <th className="text-left font-bold px-3 py-1.5">Sis2000</th>
+                  <th className="text-right font-bold px-3 py-1.5">Suma</th>
+                  {vistaTecnica && <th className="text-right font-bold px-3 py-1.5">Prima</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {emision.lineas.map((l) => (
+                  <tr key={`${l.ccober}-${l.concepto}`} className="border-t border-slate-100 align-top">
+                    <td className="px-3 py-1.5">{l.concepto}{vistaTecnica && l.ambigua && <p className="text-[0.66rem] text-amber-700">{l.ambigua}</p>}</td>
+                    <td className="px-3 py-1.5 tabular-nums">{l.ccober}{nombreSis(l.ccober) ? ` · ${nombreSis(l.ccober)}` : ''}</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums">{importe(l.suma)}</td>
+                    {vistaTecnica && <td className="px-3 py-1.5 text-right tabular-nums">{importe(l.prima)}</td>}
+                  </tr>
+                ))}
+                <tr className="border-t border-slate-200 font-bold">
+                  <td className="px-3 py-1.5" colSpan={vistaTecnica ? 3 : 2}>Prima total</td>
+                  <td className="px-3 py-1.5 text-right tabular-nums">{m(emision.primaTotal)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="grid sm:grid-cols-3 gap-4">
+          <Field label="Plan contenedor" full
+            hint="Aporta la moneda y el código de plan de la póliza. Sis2000 no permite dos pólizas vigentes del mismo asegurado y plan."
+            error={errorContenedores ?? (contenedores && cramo != null && !planesRamo.length ? `El ramo ${xramo} no tiene planes vigentes en Sis2000: La Mundial debe crear o activar uno para poder emitir.` : undefined)}>
+            <Select value={cplan} onChange={(e) => setCplan(e.target.value)} disabled={cargandoContenedores || !planesRamo.length}>
+              <option value="">{cargandoContenedores ? 'Cargando planes…' : 'Elige el plan'}</option>
+              {planesRamo.map((p) => <option key={p.cplan} value={p.cplan}>{p.cplan} · {p.xplan}</option>)}
+            </Select>
+          </Field>
+          {pideUnidad(cramo) && (
+            <Field label="N.º de apartamento / unidad" hint="Obligatorio en este ramo: Sis2000 identifica la póliza por cédula + plan + unidad.">
+              <Input inputMode="numeric" maxLength={6} value={c.apartamento} onChange={(e) => setComun({ apartamento: e.target.value.replace(/\D/g, '') })} placeholder="Ej. 1" />
+            </Field>
+          )}
+        </div>
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input type="checkbox" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} />
+          El tomador declara que la información es veraz y acepta los Términos y Condiciones.
+        </label>
+        {error && <Aviso tono="error">{error}</Aviso>}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="primary" size="lg" disabled={!habilitada || !acepta || faltan.length > 0 || emitiendo} onClick={() => void emitirAhora()}
+            title={faltan.join(' ') || undefined}>
+            {emitiendo ? <Loader2 size={15} className="animate-spin" /> : <FileCheck2 size={15} />}
+            {emitiendo ? 'Emitiendo…' : 'Emitir en Sis2000 QA'}
+          </Button>
+          <p className="text-[0.78rem] text-slate-500 max-w-md">
+            {!habilitada
+              ? 'Para probar: VITE_RC_EMITIR=1 en .env.local (con NEST_API_URL de QA) y reiniciar npm run dev.'
+              : faltan.length ? faltan.join(' ') : 'Opción de prueba: la póliza queda con el recibo pendiente de cobro. En nest-api: RIESGOS_GENERALES_EMISION_COTIZADOR=true y la key con emissions:riesgos-generales-prima.'}
+          </p>
+        </div>
+      </div>
+    </SectionCard>
   );
 }
