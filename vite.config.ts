@@ -9,6 +9,10 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const target = (env.NEST_API_URL || '').replace(/\/$/, '');
   const esQa = /nexusqa|cierrelmds|localhost|127\.0\.0\.1/.test(target);
+  // COTIZADOR_PUBLICO=1 (link por túnel): la key solo sirve para cotizar/emitir Pastora; todo lo demás 404.
+  const publico = (process.env.COTIZADOR_PUBLICO || env.COTIZADOR_PUBLICO) === '1';
+  const rutaPastora = (url: string) =>
+    /^\/nest\/api\/v1\/riesgos-generales\/(cotizacion|emision)(\?|$)/.test(url);
   const proxy: Record<string, ProxyOptions> | undefined = target
     ? {
         '/nest': {
@@ -17,7 +21,11 @@ export default defineConfig(({ mode }) => {
           rewrite: (p) => p.replace(/^\/nest/, ''),
           headers: env.NEST_API_KEY ? { apikey: env.NEST_API_KEY } : {},
           // Emitir solo contra QA/dev: con cualquier otro destino la ruta de emisión responde 404.
-          bypass: (req) => (!esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(req.url ?? '') ? false : undefined),
+          bypass: (req) => {
+            const url = req.url ?? '';
+            if (publico && !rutaPastora(url)) return false;
+            return !esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(url) ? false : undefined;
+          },
         },
       }
     : undefined;
@@ -25,7 +33,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.VITE_APP_BASE || '/',
     plugins: [react(), tailwindcss()],
-    server: { host: true, port: 5180, proxy },
+    server: { host: true, port: 5180, proxy, ...(publico ? { allowedHosts: ['.trycloudflare.com'] } : {}) },
     preview: { proxy },
   };
 });
