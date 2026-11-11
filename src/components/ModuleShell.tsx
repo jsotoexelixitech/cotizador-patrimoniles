@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, HelpCircle, Settings2, Sparkles, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Beef, HelpCircle, Settings2, Sparkles, ShieldCheck } from 'lucide-react';
 import { AuroraBackground } from './AuroraBackground';
 import { TopProgressBar } from './TopProgressBar';
 import { TopStepper } from './TopStepper';
@@ -19,6 +19,12 @@ const VISTA_PARAMETROS = {
   description: 'Rangos de tasa, primas mínimas, factores, topes, sublímites, coberturas y condiciones que usa el cálculo.',
 };
 
+const VISTA_PASTORA = {
+  eyebrow: 'Emisión · Ramo 25',
+  title: 'Pastora: ganado de engorde',
+  description: 'Póliza de biomasa ganadera: suma asegurada = kg iniciales × precio por kg. La prima la calcula nest-api.',
+};
+
 /** Cascarón visual RCV: aurora + progreso + stepper píldora + cabecera + ayuda + toasts. */
 export function ModuleShell({ children }: { children: ReactNode }) {
   const step = useWizardStore((s) => s.step);
@@ -26,8 +32,10 @@ export function ModuleShell({ children }: { children: ReactNode }) {
   const setVista = useWizardStore((s) => s.setVista);
   const producto = useCotizacionStore((s) => s.producto);
   const personalizado = useParametrosStore((s) => esPersonalizado(s));
-  const parametros = vista === 'parametros';
-  const current = parametros ? VISTA_PARAMETROS : MODULE_STEPS.find((s) => s.n === step) ?? MODULE_STEPS[0];
+  // Pastora es una vista aparte como Parámetros: sin stepper del cotizador.
+  const pastora = vista === 'pastora';
+  const parametros = vista === 'parametros' || pastora;
+  const current = pastora ? VISTA_PASTORA : parametros ? VISTA_PARAMETROS : MODULE_STEPS.find((s) => s.n === step) ?? MODULE_STEPS[0];
 
   return (
     <div className="min-h-screen relative">
@@ -71,13 +79,23 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => { setVista(parametros ? 'cotizador' : 'parametros'); window.scrollTo({ top: 0 }); }}
+                  onClick={() => { setVista(vista === 'parametros' ? 'cotizador' : 'parametros'); window.scrollTo({ top: 0 }); }}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all hover:-translate-y-0.5 ${
-                    parametros ? 'bg-indigo-700 text-white shadow-[0_8px_22px_rgba(15,26,90,0.3)]' : 'glass-light text-slate-600 hover:text-indigo-600'
+                    vista === 'parametros' ? 'bg-indigo-700 text-white shadow-[0_8px_22px_rgba(15,26,90,0.3)]' : 'glass-light text-slate-600 hover:text-indigo-600'
                   }`}
                 >
-                  {parametros ? <ArrowLeft size={13} /> : <Settings2 size={13} />}
-                  {parametros ? 'Volver al cotizador' : 'Parámetros'}
+                  {vista === 'parametros' ? <ArrowLeft size={13} /> : <Settings2 size={13} />}
+                  {vista === 'parametros' ? 'Volver al cotizador' : 'Parámetros'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setVista(pastora ? 'cotizador' : 'pastora'); window.scrollTo({ top: 0 }); }}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all hover:-translate-y-0.5 ${
+                    pastora ? 'bg-indigo-700 text-white shadow-[0_8px_22px_rgba(15,26,90,0.3)]' : 'glass-light text-slate-600 hover:text-indigo-600'
+                  }`}
+                >
+                  {pastora ? <ArrowLeft size={13} /> : <Beef size={13} />}
+                  {pastora ? 'Volver al cotizador' : 'Pastora'}
                 </button>
               </div>
             </div>
@@ -85,7 +103,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
 
           <section className="surface-card overflow-hidden">
             <div className="p-6 sm:p-8 lg:p-10">
-              <div key={parametros ? 'parametros' : step} className="animate-spring-in">{children}</div>
+              <div key={parametros ? vista : step} className="animate-spring-in">{children}</div>
             </div>
 
             <div className="no-imprimir hidden md:flex items-center justify-between gap-4 px-8 lg:px-10 py-5 border-t border-slate-100/80 bg-gradient-to-b from-slate-50/50 to-white/40 backdrop-blur-sm">

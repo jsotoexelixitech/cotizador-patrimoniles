@@ -6,6 +6,7 @@ import { RiesgoStep } from './features/RiesgoStep';
 import { CotizacionStep } from './features/CotizacionStep';
 import { EmisionStep } from './features/EmisionStep';
 import { ParametrosView } from './features/ParametrosView';
+import { PastoraView } from './features/PastoraView';
 
 /** Enrutador por paso: Producto → Tomador → Riesgo → Cotización → Emisión; aparte, Parámetros. */
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
 
   let content = <ProductoStep />;
   if (vista === 'parametros') content = <ParametrosView />;
+  else if (vista === 'pastora') content = <PastoraView />;
   else if (step === 2) content = <TomadorStep />;
   else if (step === 3) content = <RiesgoStep />;
   else if (step === 4) content = <CotizacionStep />;
