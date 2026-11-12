@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
-import { documentosRcg, urlDocumento } from '../pdf/condicionadosRcg';
+import { documentosRcg, documentosRcgSis2000, urlDocumento, type DocumentoRcg } from '../pdf/condicionadosRcg';
 import { useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
 import { SectionCard } from '../components/ui/SectionCard';
@@ -61,6 +61,12 @@ export function EmisionStep() {
   // Número provisional hasta tener el correlativo oficial desde el backend.
   const [numero] = useState(() => `RCG-${new Date().getFullYear()}-P${String(Date.now()).slice(-6)}`);
 
+  // Plan de Sis2000 o combo del ramo 28 (RCG): mismo condicionado y anexos que la cotización RCG, por ccober o por nombre.
+  const planElegido = listaPlanes.find((p) => p.cplan === s.planSel);
+  const docsSis2000: DocumentoRcg[] = planes
+    ? (planElegido ? documentosRcgSis2000(planElegido.cramo, cobCot ? cobCot.cot.coberturas : planElegido.coberturas, 'USD') : [])
+    : combo && cobCombo ? documentosRcgSis2000(cobCombo.cramo, cobCombo.cot.coberturas, cobCombo.moneda) : [];
+
   const nueva = () => { s.reset(); resetPlanes(); resetWizard(); window.scrollTo({ top: 0 }); };
 
   const descargarRcg = async () => {
@@ -97,6 +103,8 @@ export function EmisionStep() {
     setGenerando(true);
     try {
       const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const assets = await cargarAssetsRcg();
+      if (docsSis2000.length) assets.condicionados = await (await import('../pdf/condicionadosRcg')).cargarCondicionados(docsSis2000);
       const bytes = await generarPdfRcg({
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: 'USD',
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
@@ -110,9 +118,9 @@ export function EmisionStep() {
           : plan.coberturas.map((x) => ({ nombre: x.nombre, montos: [x.suma] })),
         deducible: esRcg ? cotPlanes.deducible : '', notaIgtf: true, condiciones: esRcg ? cotPlanes.condiciones : [], vigenciaDias,
         plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg }, mesaTecnica,
-      }, await cargarAssetsRcg());
+      }, assets);
       descargarPdf(bytes, `Cotizacion_LaMundial_${plan.cplan}_${c.asegurado.trim().replace(/\s+/g, '_') || 'plan'}.pdf`);
-      toast.success('Cotización descargada', `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}.`);
+      toast.success('Cotización descargada', `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`);
     } catch (e) {
       toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
     } finally {
@@ -127,6 +135,8 @@ export function EmisionStep() {
     setGenerando(true);
     try {
       const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const assets = await cargarAssetsRcg();
+      if (docsSis2000.length) assets.condicionados = await (await import('../pdf/condicionadosRcg')).cargarCondicionados(docsSis2000);
       const bytes = await generarPdfRcg({
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda,
         indole: '', actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
@@ -136,9 +146,9 @@ export function EmisionStep() {
         coberturas: cot.coberturas.map((x) => ({ nombre: vistaTecnica ? `${x.nombre} (prima ${importe(x.prima)})` : x.nombre, montos: [x.suma] })),
         deducible: '', notaIgtf: !/^bs/i.test(moneda), condiciones: [], vigenciaDias, mesaTecnica,
         plan: { ramo: xramoCombo, nombre: 'Combo de coberturas', cplan: `COMBO-${cramo}`, esRcg: false, combo: true },
-      }, await cargarAssetsRcg());
+      }, assets);
       descargarPdf(bytes, `Cotizacion_LaMundial_Combo_${cramo}_${c.asegurado.trim().replace(/\s+/g, '_') || 'combo'}.pdf`);
-      toast.success('Cotización descargada', `${numero} · combo de ${xramoCombo}.`);
+      toast.success('Cotización descargada', `${numero} · combo de ${xramoCombo}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`);
     } catch (e) {
       toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
     } finally {
@@ -170,6 +180,7 @@ export function EmisionStep() {
       {rcg ? <ResumenRcg /> : planes ? <ResumenPlan /> : combo ? <ResumenCombo /> : <ResumenRc />}
 
       {rcg && <CondicionadosRcg coberturas={cotRcg.coberturas.map((x) => x.nombre)} moneda={s.rcg.moneda} />}
+      {(planes || combo) && docsSis2000.length > 0 && <CondicionadosRcg docs={docsSis2000} />}
 
       {planes ? <EmitirPlan /> : combo ? <EmitirCombo numero={numero} /> : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />}
 
@@ -202,8 +213,9 @@ export function EmisionStep() {
 }
 
 /** Minuta La Mundial 30-oct-2026: condicionado general y particular + anexos de las coberturas contratadas, incluidos en el PDF. */
-function CondicionadosRcg({ coberturas, moneda }: { coberturas: string[]; moneda: string }) {
-  const docs = documentosRcg(coberturas, moneda);
+function CondicionadosRcg(p: { coberturas: string[]; moneda: string } | { docs: DocumentoRcg[] }) {
+  // RCG: por nombre de cobertura. Planes de Sis2000 y combo (ramo 28): lista ya resuelta por ccober/nombre.
+  const docs = 'docs' in p ? p.docs : documentosRcg(p.coberturas, p.moneda);
   return (
     <SectionCard title="Condicionados y anexos" Icon={FileText} statusLabel={`${docs.length} documentos`} statusTone="success"
       description="Se incluyen en el PDF de la cotización junto con la constancia de recepción que firma el tomador/asegurado.">
