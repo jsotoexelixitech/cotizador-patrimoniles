@@ -21,7 +21,8 @@ export interface PlanCatalogo {
 }
 export interface RamoCatalogo { cramo: number; xramo: string; planes: PlanCatalogo[] }
 
-export interface CoberturaPlan { nombre: string; suma: number; prima: number }
+/** `ccober`: código de Sis2000, solo si la respuesta de la cotización lo trae. */
+export interface CoberturaPlan { nombre: string; suma: number; prima: number; ccober?: string }
 export interface PlanSis2000 { cramo: number; cplan: string; nombre: string; suma: number; prima: number; coberturas: CoberturaPlan[] }
 export interface PrimaTarifaPlan { cplan: string; prima: number; primaMinimaAplicada: boolean }
 export interface ResultadoEmision { cnpoliza: string; cnrecibo: string; urlpoliza: string }
@@ -82,6 +83,7 @@ export function parsearCotizacionPlan(cramo: number, cplan: string, nombre: stri
     nombre: String(f.xcobertura ?? '').trim(),
     suma: Number(f.msumaasegext ?? f.msumaaseg ?? 0),
     prima: Number(f.mprimaext ?? 0),
+    ...(f.ccober != null && String(f.ccober).trim() ? { ccober: String(f.ccober).trim() } : {}),
   }));
   return {
     cramo,
