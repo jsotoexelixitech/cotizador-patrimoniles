@@ -34,6 +34,13 @@ const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; 
   },
 ];
 
+/**
+ * «Planes Sis2000» queda oculto (12-nov-2026): para el usuario es lo mismo que «Combo de coberturas».
+ * El código sigue; se vuelve a mostrar con VITE_MOSTRAR_PLANES_SIS2000=1 en .env.local.
+ */
+const MOSTRAR_PLANES = import.meta.env.VITE_MOSTRAR_PLANES_SIS2000 === '1';
+const PRODUCTOS_VISIBLES = PRODUCTOS.filter((p) => p.id !== 'planes' || MOSTRAR_PLANES);
+
 const MODOS: [Modo, string][] = [['p', 'Solo Patronal (RCP)'], ['e', 'Solo Empresarial (RCE)'], ['both', 'Patronal + Empresarial']];
 
 export function ProductoStep() {
@@ -56,9 +63,9 @@ export function ProductoStep() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="¿Qué deseas cotizar?" description="Tarifa del cotizador (RCG o RCP/RCE), un plan ya configurado en Sis2000 o un combo con las coberturas de un ramo." Icon={Layers}>
+      <SectionCard title="¿Qué deseas cotizar?" description={MOSTRAR_PLANES ? 'Tarifa del cotizador (RCG o RCP/RCE), un plan ya configurado en Sis2000 o un combo con las coberturas de un ramo.' : 'Tarifa del cotizador (RCG o RCP/RCE) o un combo con las coberturas de un ramo de Sis2000.'} Icon={Layers}>
         <div className="grid sm:grid-cols-2 gap-3">
-          {PRODUCTOS.map((p) => {
+          {PRODUCTOS_VISIBLES.map((p) => {
             const active = producto === p.id;
             return (
               <button
