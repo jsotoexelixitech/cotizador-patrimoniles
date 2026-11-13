@@ -162,4 +162,7 @@ body {
   .surface-card { box-shadow: none; border-radius: 0; }
   .animate-spring-in, .animate-fade-in { animation: none !important; }
   section { break-inside: avoid; }
+  /* El contenedor principal es más largo que una hoja: si no se deja cortar, la hoja 1 sale vacía (solo el encabezado). */
+  section.surface-card { break-inside: auto !important; overflow: visible !important; }
+  main { min-height: 0 !important; padding-top: 0 !important; }
 }
