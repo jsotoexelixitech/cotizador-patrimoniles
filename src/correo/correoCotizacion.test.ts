@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_ADJUNTO_BYTES, aBase64, armarPayloadPoliza, armarPayloadCorreo, asuntoCotizacion, correoValido, errorTamanoPdf, mensajeErrorCorreo,
+  MAX_ADJUNTO_BYTES, aBase64, adjuntosQueCaben, armarPayloadPoliza, armarPayloadCorreo, asuntoCotizacion, correoValido, errorTamanoPdf, mensajeErrorCorreo,
 } from './correoCotizacion';
 
 const pdf = new TextEncoder().encode('%PDF-1.7 prueba');
@@ -94,5 +94,17 @@ describe('armarPayloadPoliza', () => {
     expect(() => armarPayloadPoliza({
       correo: 'a@b.com', nombre: '', cnpoliza: '1', producto: 'RC', adjuntos: [{ pdf: new Uint8Array(MAX_ADJUNTO_BYTES + 1), nombreArchivo: 'x.pdf' }],
     })).toThrow(/admite hasta/);
+  });
+  it('si los adjuntos pasan del tope quedan por prioridad: anexos, póliza y recibo', () => {
+    const poliza = { pdf: new Uint8Array(6), nombreArchivo: 'Poliza.pdf' };
+    const recibo = { pdf: new Uint8Array(2), nombreArchivo: 'Recibo.pdf' };
+    const anexos = { pdf: new Uint8Array(6), nombreArchivo: 'Anexos.pdf' };
+    expect(adjuntosQueCaben({ poliza, recibo, anexos }, 14)).toEqual([poliza, recibo, anexos]);
+    expect(adjuntosQueCaben({ poliza, recibo, anexos }, 12)).toEqual([poliza, anexos]);
+    expect(adjuntosQueCaben({ poliza, recibo, anexos }, 10)).toEqual([recibo, anexos]);
+    expect(adjuntosQueCaben({ poliza, recibo: null }, 10)).toEqual([poliza]);
+  });
+  it('avisa cuando el envío se cancela por tiempo', () => {
+    expect(mensajeErrorCorreo(408, null)).toMatch(/tardó demasiado/);
   });
 });

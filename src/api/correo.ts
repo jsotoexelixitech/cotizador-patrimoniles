@@ -5,13 +5,18 @@ import {
 } from '../correo/correoCotizacion';
 
 const URL_MAIL = '/nest/api/v1/mail/send';
+/** Con adjuntos de varios MB nest-api tarda; pasado este tiempo se cancela y se muestra el error (nunca queda colgado). */
+const TIMEOUT_MS = 120_000;
 
 async function enviar(payload: PayloadCorreo): Promise<void> {
   let res: Response;
   try {
-    res = await fetch(URL_MAIL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-  } catch {
-    throw new Error(mensajeErrorCorreo(0, null) ?? 'Sin conexión con nest-api.');
+    res = await fetch(URL_MAIL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload), signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+  } catch (e) {
+    const cancelado = e instanceof DOMException && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    throw new Error(mensajeErrorCorreo(cancelado ? 408 : 0, null) ?? 'Sin conexión con nest-api.');
   }
   const data: unknown = await res.json().catch(() => null);
   const error = mensajeErrorCorreo(res.status, data);

@@ -116,6 +116,25 @@ export type DatosCorreoPoliza = {
   adjuntos: { pdf: Uint8Array; nombreArchivo: string }[];
 };
 
+export type AdjuntoPdf = { pdf: Uint8Array; nombreArchivo: string };
+
+/**
+ * Adjuntos que caben en el tope del correo. Si el total lo supera, la prioridad es: anexos (no tienen enlace), póliza
+ * (si queda fuera va el botón «Ver mi póliza») y recibo. En el correo van en orden póliza, recibo, anexos.
+ */
+export function adjuntosQueCaben(c: { poliza?: AdjuntoPdf | null; recibo?: AdjuntoPdf | null; anexos?: AdjuntoPdf | null }, max = MAX_ADJUNTO_BYTES): AdjuntoPdf[] {
+  let total = 0;
+  const cabe = (x?: AdjuntoPdf | null) => {
+    if (!x || total + x.pdf.length > max) return null;
+    total += x.pdf.length;
+    return x;
+  };
+  const anexos = cabe(c.anexos);
+  const poliza = cabe(c.poliza);
+  const recibo = cabe(c.recibo);
+  return [poliza, recibo, anexos].filter((x): x is AdjuntoPdf => !!x);
+}
+
 export const asuntoPoliza = (cnpoliza: string) => `La Mundial de Seguros | Póliza N.º ${cnpoliza}`;
 
 /** Correo de la póliza emitida: datos de la póliza + condicionado y anexos (y la póliza si se pudo descargar) adjuntos. */
@@ -172,6 +191,7 @@ export function mensajeErrorCorreo(status: number, data: unknown): string | null
     return `nest-api no pudo enviar el correo${typeof o.error === 'string' && o.error ? `: ${o.error}` : '.'}`;
   }
   if (status === 0) return 'Sin conexión con nest-api.';
+  if (status === 408) return 'nest-api tardó demasiado en responder y el envío se canceló. Revisa si el correo llegó antes de enviarlo de nuevo.';
   if (status === 403) return `La key del cotizador no tiene permiso para enviar correos${msg ? ` (${msg})` : ' (scope emissions:auto)'}.`;
   if (status === 413) return 'El PDF es demasiado grande para el correo. Descárgalo y envíalo por otro medio.';
   if (status === 404) return data === null ? 'Proxy sin configurar o envío de correo no disponible en este modo.' : 'Este nest-api no tiene la ruta de correo con adjuntos.';

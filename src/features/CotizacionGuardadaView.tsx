@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, Check, Copy, CreditCard, Download, ExternalLink, FileCheck2, FileText, Loader2, Pencil, RefreshCw, Search, ShieldCheck, User,
+  ArrowLeft, Check, Copy, CreditCard, Download, ExternalLink, FileCheck2, FileText, Loader2, MailCheck, Pencil, RefreshCw, Search, ShieldCheck, User,
 } from 'lucide-react';
 import {
   crearCheckout, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, traerCotizacion, type Checkout, type CotizacionGuardada,
@@ -13,8 +13,9 @@ import { SectionCard } from '../components/ui/SectionCard';
 import { MODO_CLIENTE } from '../config/modoCliente';
 import { EnviarPolizaCorreo } from './EmisionStep';
 import { estadoParaReabrir, huellaCotizacion, type AlternativaGuardada, type DatosCotizacion, type Opcion } from '../cotizaciones/snapshot';
+import { MAX_ADJUNTO_BYTES, aBase64 } from '../correo/correoCotizacion';
 import { cn } from '../lib/utils';
-import { documentosRcg, urlDocumento } from '../pdf/condicionadosRcg';
+import { documentosRcg, urlDocumento, type DocumentoRcg } from '../pdf/condicionadosRcg';
 import { useCotizacionGuardadaStore } from '../store/cotizacionGuardadaStore';
 import { useCotizacionStore } from '../store/cotizacionStore';
 import { useParametrosStore } from '../store/parametrosStore';
@@ -40,6 +41,24 @@ function urlDeRetorno(): string {
   u.hash = '';
   if (cliente) u.searchParams.set('vista', 'cliente');
   return u.toString();
+}
+
+/**
+ * PDF «Condicionado y anexos» que viaja con el checkout: Nexus lo guarda y lo adjunta al correo de la póliza cuando la
+ * emite (el navegador puede estar cerrado). null si no hay anexos (RCP/RCE), si falla o si pasa del tope: el pago
+ * sigue y el correo saldrá solo con la póliza.
+ */
+async function anexosParaCheckout(codigo: string, docs: DocumentoRcg[], tomador: { nombre: string; rif: string }) {
+  if (!docs.length) return null;
+  try {
+    const { cargarCondicionados } = await import('../pdf/condicionadosRcg');
+    const { cargarLogoRcg, generarPdfAnexosPoliza } = await import('../pdf/cotizacionRcgPdf');
+    const [condicionados, logo] = await Promise.all([cargarCondicionados(docs), cargarLogoRcg()]);
+    const pdf = await generarPdfAnexosPoliza({ cotizacion: codigo, asegurado: tomador.nombre, rif: tomador.rif, fecha: new Date() }, condicionados, logo);
+    return pdf.length > 0 && pdf.length <= MAX_ADJUNTO_BYTES ? { nombre: `Condicionado_y_anexos_${codigo}.pdf`, base64: aBase64(pdf) } : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Pantalla para escribir el código de cotización. */
@@ -141,18 +160,19 @@ function Cotizacion({ codigo }: { codigo: string }) {
   };
   useEffect(() => { void cargar(); }, [codigo]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Si en esta pantalla se vio la cotización antes de emitirse, al quedar emitida se sigue consultando hasta que Nexus
+  // diga si envió el correo de la póliza (lo manda el servidor justo después de emitir).
+  const vioSinEmitir = useRef(false);
+  if (cot && cot.estado !== 'emitida') vioSinEmitir.current = true;
+  const esperaCorreo = !!cot && cot.estado === 'emitida' && !!cot.pago?.referencia && !cot.correoPoliza && vioSinEmitir.current;
+
   // Mientras el pago está en curso o la póliza se está emitiendo, se consulta el estado: la emisión ocurre en Nexus.
-  const enEspera = !!cot && !cot.vencida && !cot.error && (cot.estado === 'pendiente_pago' || cot.estado === 'pagada');
+  const enEspera = !!cot && !cot.vencida && !cot.error && (cot.estado === 'pendiente_pago' || cot.estado === 'pagada' || esperaCorreo);
   useEffect(() => {
     if (!enEspera) return;
     const t = setInterval(() => { if (consultas.current++ < MAX_CONSULTAS) void cargar(true); }, ESPERA_MS);
     return () => clearInterval(t);
   }, [enEspera]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Si en esta pantalla se vio la cotización antes de emitirse (pago o reintento), al quedar emitida se envía
-  // sola la póliza con sus anexos al correo del tomador. Al reabrirla ya emitida no se reenvía (hay botón).
-  const vioSinEmitir = useRef(false);
-  if (cot && cot.estado !== 'emitida') vioSinEmitir.current = true;
 
   const volver = () => (admin ? setVista('cotizaciones') : reset());
 
@@ -177,13 +197,15 @@ function Cotizacion({ codigo }: { codigo: string }) {
   const elegida = d.alternativas.find((a) => a.opcion === (abierta ? opcion : cot.opcion ?? opcion)) ?? null;
   const pagable = (o: Opcion | null) => !!o && !!d.emisiones?.[o];
   const indice = elegida ? d.alternativas.indexOf(elegida) : 0;
+  const docs = d.producto === 'rcg' ? documentosRcg(d.coberturas.map((x) => x.nombre), d.moneda) : [];
 
   const pagar = async () => {
     if (!elegida) return;
     setOcupado(true);
     setErrorPago(null);
     try {
-      const c = await crearCheckout(cot.codigo, elegida.opcion, urlDeRetorno());
+      const anexos = await anexosParaCheckout(cot.codigo, docs, { nombre: d.tomador.nombre, rif: d.tomador.rif });
+      const c = await crearCheckout(cot.codigo, elegida.opcion, urlDeRetorno(), anexos);
       if (MODO_CLIENTE) { window.location.assign(c.checkoutUrl); return; }
       setCheckout(c);
       consultas.current = 0;
@@ -198,8 +220,10 @@ function Cotizacion({ codigo }: { codigo: string }) {
   const reintentar = async () => {
     setOcupado(true);
     try {
-      setCot(await reintentarCotizacion(cot.codigo));
-      toast.success('Reintento hecho', cot.codigo);
+      const c = await reintentarCotizacion(cot.codigo);
+      setCot(c);
+      if (c.correoPoliza?.error) toast.error('El correo de la póliza no salió', c.correoPoliza.error);
+      else toast.success('Reintento hecho', cot.codigo);
     } catch (e) {
       toast.error('No se pudo reintentar', e instanceof Error ? e.message : String(e));
       await cargar(true);
@@ -222,8 +246,9 @@ function Cotizacion({ codigo }: { codigo: string }) {
     window.scrollTo({ top: 0 });
   };
 
-  const docs = d.producto === 'rcg' ? documentosRcg(d.coberturas.map((x) => x.nombre), d.moneda) : [];
   const urlPago = checkout?.checkoutUrl ?? cot.pago?.checkoutUrl;
+  const cobrado = !!cot.poliza?.cobro?.ok;
+  const correoEnviado = !!cot.correoPoliza?.enviadoEn;
 
   return (
     <div className="space-y-5">
@@ -348,8 +373,24 @@ function Cotizacion({ codigo }: { codigo: string }) {
                   : admin ? `La póliza se emitió pero el cobro del recibo falló: ${cot.poliza.cobro?.error ?? 'sin detalle'}.` : 'Tu pago está recibido; estamos terminando de registrar el recibo.'}
               {admin && cot.poliza.cobro?.ingresoCaja && <> <a className="text-indigo-600 font-bold" href={cot.poliza.cobro.ingresoCaja} target="_blank" rel="noreferrer">Ingreso de caja</a></>}
             </p>
-            {admin && cot.pago?.referencia && !cot.poliza.cobro?.ok && (
-              <div className="mt-3"><Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}><RefreshCw size={13} /> Reintentar el cobro del recibo</Button></div>
+            {correoEnviado && (
+              <p className="mt-3 flex items-center gap-1.5 text-[0.8rem] font-semibold text-emerald-700">
+                <MailCheck size={14} /> {admin ? 'Póliza enviada a' : 'Te enviamos la póliza a'} {cot.correoPoliza?.a ?? d.tomador.correo}{docs.length ? ', con el condicionado y los anexos' : ''}.
+              </p>
+            )}
+            {!correoEnviado && esperaCorreo && (
+              <p className="mt-3 flex items-center gap-2 text-[0.8rem] text-slate-600"><Loader2 size={13} className="animate-spin" /> Enviando la póliza a {d.tomador.correo}…</p>
+            )}
+            {admin && !correoEnviado && cot.correoPoliza?.error && (
+              <div className="mt-3"><Aviso tono="error">El correo automático de la póliza no salió: {cot.correoPoliza.error}</Aviso></div>
+            )}
+            {admin && cot.pago?.referencia && (!cobrado || !correoEnviado) && (
+              <div className="mt-3">
+                <Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}>
+                  {ocupado ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                  {!cobrado ? 'Reintentar el cobro del recibo' : 'Reenviar el correo de la póliza'}
+                </Button>
+              </div>
             )}
           </SectionCard>
           {docs.length > 0 && (
@@ -368,7 +409,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
             emision={{ cnpoliza: cot.poliza.cnpoliza, cnrecibo: cot.poliza.cnrecibo ?? '', urlpoliza: cot.poliza.urlpoliza ?? '' }}
             prima={elegida ? m(elegida.prima) : undefined} docs={docs} producto={d.nombreProducto}
             tomador={{ correo: d.tomador.correo, nombre: d.tomador.nombre, rif: d.tomador.rif }}
-            auto={vioSinEmitir.current} />
+            urlRecibo={cobrado ? cot.poliza.cobro?.ingresoCaja : null} />
         </>
       )}
 

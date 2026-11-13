@@ -542,10 +542,13 @@ function constanciaRecepcion(
 /**
  * Condicionado y anexos de la PÓLIZA emitida (ya no van en la cotización): los PDF de los condicionados en orden y al final
  * la constancia de recepción con el número de póliza. Es lo que se adjunta al correo de la póliza.
+ * Sin número de póliza todavía (se arma al mandar a pagar y Nexus lo adjunta al emitir), la constancia se refiere a
+ * «la póliza que se emita con la cotización N.º <código>».
  */
 export async function generarPdfAnexosPoliza(
-  d: { cnpoliza: string; asegurado: string; rif: string; fecha: Date }, condicionados: CondicionadoPdf[], logoJpg: Uint8Array,
+  d: { cnpoliza?: string; cotizacion?: string; asegurado: string; rif: string; fecha: Date }, condicionados: CondicionadoPdf[], logoJpg: Uint8Array,
 ): Promise<Uint8Array> {
+  const ref = d.cnpoliza ? `Póliza ${d.cnpoliza}` : `Póliza que se emita con la cotización N.º ${d.cotizacion ?? ''}`.trim();
   const doc = await PDFDocument.create();
   const regular = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -556,9 +559,9 @@ export async function generarPdfAnexosPoliza(
     copiadas.forEach((pg) => doc.addPage(pg));
   }
   constanciaRecepcion(doc, d, condicionados.map((x) => x.titulo), regular, bold, logo, {
-    encabezado: `Póliza ${d.cnpoliza}`, pie: 'Constancia de recepción - forma parte de la póliza.',
+    encabezado: ref, pie: 'Constancia de recepción - forma parte de la póliza.',
   });
-  doc.setTitle(`Condicionado y anexos - Póliza ${d.cnpoliza} - ${limpiar(d.asegurado)}`);
+  doc.setTitle(`Condicionado y anexos - ${ref} - ${limpiar(d.asegurado)}`);
   doc.setAuthor('La Mundial de Seguros, C.A.');
   return doc.save();
 }

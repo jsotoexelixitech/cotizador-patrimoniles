@@ -118,4 +118,13 @@ describe('PDF de condicionado y anexos de la póliza', () => {
     expect(pdf.getPageCount()).toBe(paginas + 1);
     expect(pdf.getTitle()).toContain('Póliza 28-1-0000123');
   });
+
+  it('sin número de póliza (al mandar a pagar) la constancia se refiere a la cotización', async () => {
+    const docs = documentosRcg([], 'BS');
+    const condicionados = docs.map((d) => ({ titulo: d.titulo, bytes: leer(join('condicionados', d.archivo)) }));
+    const bytes = await generarPdfAnexosPoliza(
+      { cotizacion: 'RCG-2026-000123-7KQ4', asegurado: 'Comercial Prueba, C.A.', rif: 'J-1837137', fecha: new Date(2026, 10, 13) }, condicionados, assets.logo,
+    );
+    expect((await PDFDocument.load(bytes)).getTitle()).toContain('Póliza que se emita con la cotización N.º RCG-2026-000123-7KQ4');
+  });
 });

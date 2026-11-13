@@ -28,6 +28,8 @@ export interface CotizacionGuardada {
   datos?: DatosCotizacion;
   pago: { opcion?: Opcion; totalVes?: number; tasa?: number; checkoutUrl?: string; referencia?: string; monto?: number; fecha?: string } | null;
   poliza: PolizaGuardada | null;
+  /** Correo automático de la póliza (lo envía Nexus al quedar emitida la cotización pagada); null si aún no se intentó. */
+  correoPoliza?: { enviadoEn: string | null; a: string | null; error: string | null } | null;
   error: string | null;
 }
 
@@ -69,15 +71,21 @@ export function buscarCotizaciones(f: FiltroCotizaciones) {
   return pedir<CotizacionGuardada[]>(`?${q.toString()}`);
 }
 
-/** Manda a pagar la opción elegida: devuelve la URL del módulo de Pagos. Al confirmarse el pago, Nexus emite. */
-export const crearCheckout = (codigo: string, opcion: Opcion, returnUrl: string) =>
-  pedir<Checkout>(`/${encodeURIComponent(codigo)}/checkout`, json('POST', { opcion, returnUrl }));
+/** PDF «Condicionado y anexos» de la opción: Nexus lo guarda y lo adjunta al correo de la póliza al emitir. */
+export interface AnexosCheckout { nombre: string; base64: string }
+
+/**
+ * Manda a pagar la opción elegida: devuelve la URL del módulo de Pagos. Al confirmarse el pago, Nexus emite y envía
+ * la póliza al correo del tomador con los `anexos` (sin ellos, solo la póliza).
+ */
+export const crearCheckout = (codigo: string, opcion: Opcion, returnUrl: string, anexos?: AnexosCheckout | null) =>
+  pedir<Checkout>(`/${encodeURIComponent(codigo)}/checkout`, json('POST', { opcion, returnUrl, ...(anexos ? { anexos } : {}) }));
 
 /** Emisión hecha por el canal con recibo pendiente de cobro. */
 export const registrarEmisionPendiente = (codigo: string, opcion: Opcion | null, poliza: { cnpoliza: string; cnrecibo: string; urlpoliza: string }) =>
   pedir<CotizacionGuardada>(`/${encodeURIComponent(codigo)}/estado`, json('PATCH', { estado: 'emitida', opcion, poliza }));
 
-/** Admin: reintenta la emisión de una pagada sin póliza o el cobro de una emitida con el recibo pendiente. */
+/** Admin: reintenta la emisión de una pagada sin póliza, el cobro de una emitida con el recibo pendiente o el correo de la póliza. */
 export const reintentarCotizacion = (codigo: string) => pedir<CotizacionGuardada>(`/${encodeURIComponent(codigo)}/reintentar`, json('POST', {}));
 
 /** Código con el formato oficial (RCG-2026-000123-7KQ4); el provisional del cotizador no lo cumple. */

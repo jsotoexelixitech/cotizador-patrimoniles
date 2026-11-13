@@ -28,7 +28,7 @@ import { armarEmisionInformada, coberturasRc, coberturasRcg, faltantesEmisionRc,
 import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
 import { emitirCoberturas } from '../api/patrimonial';
 import type { ResultadoEmision } from '../tarifas/planes-rcg';
-import { correoValido, errorTamanoPdf, tamanoLegible } from '../correo/correoCotizacion';
+import { adjuntosQueCaben, correoValido, errorTamanoPdf, tamanoLegible, type AdjuntoPdf } from '../correo/correoCotizacion';
 import { EMISOR_CLIENTE, MODO_CLIENTE } from '../config/modoCliente';
 import { esCodigoOficial, registrarEmisionPendiente } from '../api/cotizaciones';
 import { datosCotizacionRc, datosCotizacionRcg, huellaCotizacion } from '../cotizaciones/snapshot';
@@ -548,13 +548,13 @@ function PolizaEmitida({ emision, prima, docs = [], producto = 'Responsabilidad 
   );
 }
 
-/** PDF de la póliza desde Sis2000; si el servidor no lo deja descargar (CORS, tiempo), el correo lleva solo el enlace. */
+/**
+ * PDF de la póliza o del recibo desde Sis2000; si el servidor no lo deja descargar (CORS, tiempo), el correo lleva solo el
+ * enlace. El tiempo límite cubre también la lectura del cuerpo (un PDF grande o lento no deja el envío colgado).
+ */
 async function descargarPdfPoliza(url: string): Promise<Uint8Array | null> {
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 20000);
-    const res = await fetch(url, { signal: ctrl.signal });
-    clearTimeout(t);
+    const res = await fetch(url, { signal: AbortSignal.timeout(25000) });
     if (!res.ok) return null;
     const b = new Uint8Array(await res.arrayBuffer());
     // %PDF
@@ -566,12 +566,12 @@ async function descargarPdfPoliza(url: string): Promise<Uint8Array | null> {
 
 /** Correo de la póliza al tomador: póliza (PDF o enlace) + condicionado y anexos con la constancia. Admin decide y confirma. */
 /**
- * `tomador`: datos del tomador cuando no vienen del asistente (cotización guardada en Nexus). `auto`: se envía solo una
- * vez al montar (póliza recién emitida tras el pago en línea), sin confirmar.
+ * `tomador`: datos del tomador cuando no vienen del asistente (cotización guardada en Nexus). `urlRecibo`: ingreso de
+ * caja del recibo ya cobrado; se adjunta como Recibo_<n>.pdf. El envío automático de la póliza pagada lo hace Nexus.
  */
-export function EnviarPolizaCorreo({ emision, prima, docs, producto, tomador, auto = false }: {
+export function EnviarPolizaCorreo({ emision, prima, docs, producto, tomador, urlRecibo }: {
   emision: ResultadoEmision; prima?: string; docs: DocumentoRcg[]; producto: string;
-  tomador?: { correo: string; nombre: string; rif: string }; auto?: boolean;
+  tomador?: { correo: string; nombre: string; rif: string }; urlRecibo?: string | null;
 }) {
   const comun = useCotizacionStore((x) => x.comun);
   const t = tomador ?? { correo: comun.correo, nombre: comun.asegurado, rif: rifCompleto(comun) };
@@ -580,25 +580,21 @@ export function EnviarPolizaCorreo({ emision, prima, docs, producto, tomador, au
   const [mensaje, setMensaje] = useState('');
   const valido = correoValido(correo);
   const ocupado = estado === 'enviando';
-  // StrictMode monta el efecto dos veces en desarrollo: la ref evita el doble envío.
-  const autoEnviado = useRef(false);
-  useEffect(() => {
-    if (!auto || autoEnviado.current || !correoValido(t.correo.trim())) return;
-    autoEnviado.current = true;
-    void enviar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auto]);
 
   const enviar = async () => {
     setEstado('enviando');
     try {
-      const adjuntos: { pdf: Uint8Array; nombreArchivo: string }[] = [];
-      let sinPdfPoliza = false;
-      if (emision.urlpoliza) {
-        setMensaje('Descargando la póliza…');
-        const pdf = await descargarPdfPoliza(emision.urlpoliza);
-        if (pdf) adjuntos.push({ pdf, nombreArchivo: `Poliza_${emision.cnpoliza}.pdf` });
-        else sinPdfPoliza = true;
+      let poliza: AdjuntoPdf | null = null;
+      let recibo: AdjuntoPdf | null = null;
+      let anexos: AdjuntoPdf | null = null;
+      if (emision.urlpoliza || urlRecibo) {
+        setMensaje(urlRecibo ? 'Descargando la póliza y el recibo…' : 'Descargando la póliza…');
+        const [pdfPoliza, pdfRecibo] = await Promise.all([
+          emision.urlpoliza ? descargarPdfPoliza(emision.urlpoliza) : null,
+          urlRecibo ? descargarPdfPoliza(urlRecibo) : null,
+        ]);
+        if (pdfPoliza) poliza = { pdf: pdfPoliza, nombreArchivo: `Poliza_${emision.cnpoliza}.pdf` };
+        if (pdfRecibo) recibo = { pdf: pdfRecibo, nombreArchivo: `Recibo_${emision.cnrecibo || emision.cnpoliza}.pdf` };
       }
       if (docs.length) {
         setMensaje('Armando el condicionado y los anexos…');
@@ -606,8 +602,11 @@ export function EnviarPolizaCorreo({ emision, prima, docs, producto, tomador, au
         const { cargarLogoRcg, generarPdfAnexosPoliza } = await import('../pdf/cotizacionRcgPdf');
         const [condicionados, logo] = await Promise.all([cargarCondicionados(docs), cargarLogoRcg()]);
         const pdf = await generarPdfAnexosPoliza({ cnpoliza: emision.cnpoliza, asegurado: t.nombre, rif: t.rif, fecha: new Date() }, condicionados, logo);
-        adjuntos.push({ pdf, nombreArchivo: `Condicionado_y_anexos_${emision.cnpoliza}.pdf` });
+        anexos = { pdf, nombreArchivo: `Condicionado_y_anexos_${emision.cnpoliza}.pdf` };
       }
+      // Si pasan del tope del correo quedan por prioridad anexos, póliza y recibo; la póliza va además como botón.
+      const adjuntos = adjuntosQueCaben({ poliza, recibo, anexos });
+      const sinPdfPoliza = !!emision.urlpoliza && !adjuntos.includes(poliza as AdjuntoPdf);
       setMensaje('Enviando…');
       const { enviarPolizaPorCorreo } = await import('../api/correo');
       await enviarPolizaPorCorreo({
