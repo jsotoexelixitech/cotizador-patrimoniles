@@ -72,7 +72,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 </p>
               </div>
 
-              {!SOLO_PASTORA && <div className="no-imprimir flex items-center gap-2">
+              {!SOLO_PASTORA && !MODO_CLIENTE && <div className="no-imprimir flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => toast.info('¿Necesitas ayuda?', 'Las actividades restringidas se cotizan aquí, sujetas a aprobación de la mesa técnica. Límites mayores o tasas fuera de rango se cotizan con el Área Técnica de La Mundial.')}

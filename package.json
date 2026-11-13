@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:cliente": "vite --mode cliente --port 5181",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "test": "vitest run"

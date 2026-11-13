@@ -15,7 +15,8 @@ export default defineConfig(({ mode }) => {
     /^\/nest\/api\/v1\/riesgos-generales\/(cotizacion|emision)(\?|$)/.test(url);
   // COTIZADOR_CLIENTE=1 (link al cliente): vista cliente; la key solo sirve para leer catálogos y enviar la cotización
   // por correo. Nunca emite.
-  const cliente = (process.env.COTIZADOR_CLIENTE || env.COTIZADOR_CLIENTE) === '1';
+  // `npm run dev:cliente` (--mode cliente) no depende de variables de la consola (set de CMD / $env de PowerShell).
+  const cliente = mode === 'cliente' || (process.env.COTIZADOR_CLIENTE || env.COTIZADOR_CLIENTE) === '1';
   const rutaCliente = (req: { url?: string; method?: string }) => {
     const url = req.url ?? '';
     if (req.method === 'POST') return /^\/nest\/api\/v1\/mail\/send(\?|$)/.test(url);
