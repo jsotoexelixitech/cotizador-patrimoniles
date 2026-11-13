@@ -94,6 +94,7 @@ function CotizacionRcg() {
   const m = (n: number) => `${rcg.moneda} ${importe(n)}`;
   const miles = (n: number) => n.toLocaleString('es-VE');
   const opcionValida = cot.alternativas.some((a) => a.opcion === rcg.opcion);
+  const vistaTecnicaRcg = useParametrosStore((x) => x.vistaTecnica);
   const errorSuma = errorSumaRcg(rcg.limite, prm) ?? cot.errores.limite;
   // No se deja escribir una suma mayor a la máxima de Parámetros: se recorta con aviso.
   const cambiarSuma = (valor: string) => {
@@ -139,6 +140,9 @@ function CotizacionRcg() {
                   prima={m(a.prima)} etiqueta={a.primaMinimaAplicada ? 'Prima mínima aplicada' : 'Prima neta'}>
                   <p>Suma asegurada: <strong className="text-slate-700">{m(a.limite)}</strong></p>
                   <p>{i === 0 ? 'La suma que elegiste' : `Suma × ${prm.factoresOpciones[i] ?? 1}`}{i > 0 && a.limite >= prm.limiteMax ? ' · tope máximo aplicado' : ''}</p>
+                  {vistaTecnicaRcg && a.descuentoPct != null && a.tasaInicial != null && a.tasaAplicada != null && (
+                    <p>Descuento {porcentaje(a.descuentoPct)}: tasa {porcentaje(a.tasaInicial)} → <strong className="text-slate-700">{porcentaje(Number(a.tasaAplicada.toFixed(5)))}</strong></p>
+                  )}
                 </TarjetaOpcion>
               ))}
             </div>
@@ -815,6 +819,9 @@ function CotizacionRc() {
                       <p>Por trabajador: <strong className="text-slate-700">{importe(o.limites[0])}</strong></p>
                       <p>Dos o más / evento: <strong className="text-slate-700">{importe(o.limites[1])}</strong></p>
                       {vistaTecnica && o.primaOpcionales > 0 && <p>Adicionales: {importe(o.primaOpcionales)}</p>}
+                      {vistaTecnica && o.descuentoPct != null && o.tasaInicial != null && o.tasaAplicada != null && (
+                        <p>Descuento {porcentaje(o.descuentoPct)}: tasa {porcentaje(o.tasaInicial)} → {porcentaje(Number(o.tasaAplicada.toFixed(5)))}</p>
+                      )}
                     </TarjetaOpcion>
                   ))}
                 </div>

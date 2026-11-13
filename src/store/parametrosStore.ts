@@ -28,7 +28,8 @@ interface ParametrosState {
 const ahora = () => new Date().toISOString();
 
 /**
- * Parámetros de tarifa editables. Hoy se guardan en este navegador (localStorage);
+ * Parámetros de tarifa editables (incluidos los descuentos por suma, rcg.descuentos y rc.descuentos). Hoy se guardan
+ * en este navegador (localStorage);
  * el mismo JSON es el que se publicará luego desde nest-api para todos los usuarios.
  */
 export const useParametrosStore = create<ParametrosState>()(

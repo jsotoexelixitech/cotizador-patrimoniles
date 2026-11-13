@@ -2,6 +2,7 @@
 // Portado del Apps Script de La Mundial, RCG_VERSION 'TRES-ALTERNATIVAS-USD-EUR-SIEMPRE-10-15-PRUEBA-6'.
 // Todos los valores de tarifa viven en ParametrosRcg (editables desde la pantalla de Parámetros).
 import { CORREO_RE, importe, normalizar, redondear, SUCURSALES } from './comun';
+import { descuentoAplicado, type DescuentoAplicado, type TramoDescuento } from './descuentos';
 
 export type MonedaRcg = 'USD' | 'EUR' | 'Bs.';
 export const MONEDAS_RCG: MonedaRcg[] = ['USD', 'EUR', 'Bs.'];
@@ -38,6 +39,8 @@ export interface ParametrosRcg {
   condicionFija: string;
   deducible: { pct: number; pctMinSuma: number; minUSD: number; minEUR: number; minBs: number };
   vigenciaDias: number;
+  /** Descuentos por suma asegurada elevada sobre la tasa básica (vacío = sin descuento). Se evalúa la suma de cada opción. */
+  descuentos: TramoDescuento[];
 }
 
 export const PARAMETROS_RCG: ParametrosRcg = {
@@ -100,6 +103,7 @@ export const PARAMETROS_RCG: ParametrosRcg = {
   condicionFija: 'En ningún caso la indemnización de La Compañía excederá el monto máximo fijado como límite de responsabilidad.',
   deducible: { pct: 10, pctMinSuma: 0.5, minUSD: 100, minEUR: 100, minBs: 1000 },
   vigenciaDias: 15,
+  descuentos: [],
 };
 
 /** Actividad restringida (acuerdo del 30-oct-2026): ya no bloquea; aviso en pantalla y nota en el resumen y el PDF. */
@@ -113,7 +117,8 @@ export function actividadRestringida(texto: string, p: ParametrosRcg = PARAMETRO
     p.palabrasRestringidas.some((a) => a.trim() && valor.includes(normalizar(a)));
 }
 
-export interface AlternativaRcg { opcion: 'I' | 'II' | 'III'; limite: number; prima: number; primaMinimaAplicada: boolean }
+/** Con descuento por suma, la opción trae además descuentoPct, tasaInicial y tasaAplicada (vista técnica). */
+export interface AlternativaRcg extends Partial<DescuentoAplicado> { opcion: 'I' | 'II' | 'III'; limite: number; prima: number; primaMinimaAplicada: boolean }
 
 /** Opciones I/II/III = límite × factor, con tope en el límite máximo; se descarta la que no supere a la anterior. */
 export function alternativasRcg(limite: number, tasa: number, moneda: MonedaRcg, p: ParametrosRcg = PARAMETROS_RCG): AlternativaRcg[] {
@@ -122,12 +127,15 @@ export function alternativasRcg(limite: number, tasa: number, moneda: MonedaRcg,
   return sumas.map((suma, i) => {
     // USD/EUR: mínimo proporcional a la suma de cada opción. Bs.: % de cada suma.
     const minimo = moneda === 'Bs.' ? suma * (p.pctMinimoBs / 100) : p.primaMinimaDivisa * (suma / limite);
-    const calculada = (suma * tasa) / 100;
+    // Descuento por suma elevada (Parámetros): baja la tasa básica de esta opción; la prima mínima se respeta.
+    const descuento = descuentoAplicado(suma, tasa, p.descuentos);
+    const calculada = (suma * (descuento?.tasaAplicada ?? tasa)) / 100;
     return {
       opcion: (['I', 'II', 'III'] as const)[i],
       limite: suma,
       prima: redondear(Math.max(calculada, minimo)),
       primaMinimaAplicada: calculada < minimo,
+      ...(descuento ?? {}),
     };
   });
 }

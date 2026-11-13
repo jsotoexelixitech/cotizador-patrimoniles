@@ -4,6 +4,7 @@
 import tarifa from './data/tarifa-rcp-rce.json';
 import equivalencias from './data/equivalencias-rce.json';
 import { CORREO_RE, redondear, SUCURSALES } from './comun';
+import { descuentoAplicado, type DescuentoAplicado, type TramoDescuento } from './descuentos';
 
 /** [nombre, tasa mínima %, tasa máxima %] */
 export type Rango = [string, number, number];
@@ -48,6 +49,11 @@ export interface ParametrosRc {
    * Cada opción queda con tope en su «tope individual»; la suma deseada no puede superar el tope de la opción I.
    */
   factoresSumaDeseada: number[];
+  /**
+   * Descuentos por suma asegurada elevada sobre la tasa básica (vacío = sin descuento). USD/EUR: la suma es el límite
+   * por evento / año póliza de cada opción. En Bs. no aplica: la prima es un % del límite, no sale de la tasa.
+   */
+  descuentos: TramoDescuento[];
   bs: {
     pctPrimaRcp: number;
     pctRce: number;
@@ -83,6 +89,7 @@ export const PARAMETROS_RC: ParametrosRc = {
   ],
   diferenciacion: [1, 1.10, 1.15],
   factoresSumaDeseada: [1, 2, 3],
+  descuentos: [],
   bs: {
     pctPrimaRcp: 35,
     pctRce: 60,
@@ -161,7 +168,8 @@ export function limitesSumaDeseada(suma: number, p: ParametrosRc = PARAMETROS_RC
   return salida;
 }
 
-export interface OpcionRcp {
+/** Con descuento por suma, la opción trae además descuentoPct, tasaInicial y tasaAplicada (vista técnica). */
+export interface OpcionRcp extends Partial<DescuentoAplicado> {
   id: IdOpcion;
   primaBasica: number;
   ajuste: number;
@@ -203,10 +211,15 @@ export function opcionesRcp(nomina: number, empleados: number, tasa: number, aju
     const desdeSuma = porSuma?.find((x) => x.id === d.id);
     const individual = desdeSuma ? desdeSuma.individual : redondear(Math.min(nomina * d.factor, d.topeIndividual));
     const colectivo = desdeSuma ? desdeSuma.colectivo : redondear(Math.min(individual * p.multiplicadorColectivo, d.topeColectivo));
-    const subtotal = redondear(base + ajuste + primaOpcionales);
+    // Descuento por suma elevada (Parámetros): baja la tasa básica de esta opción según su límite por evento.
+    const descuento = descuentoAplicado(colectivo, tasa, p.descuentos);
+    const basica = descuento ? redondear((nomina * descuento.tasaAplicada) / 100) : base;
+    const ajusteOpcion = descuento ? redondear((basica * ajustePct) / 100) : ajuste;
+    const subtotal = redondear(basica + ajusteOpcion + primaOpcionales);
     const prima = Math.max(p.primaMinima, subtotal);
     return {
-      id: d.id, primaBasica: base, ajuste, primaOpcionales, detalleOpcionales: detalle,
+      ...(descuento ?? {}),
+      id: d.id, primaBasica: basica, ajuste: ajusteOpcion, primaOpcionales, detalleOpcionales: detalle,
       limites: [individual, colectivo, colectivo], topeIndividual: d.topeIndividual, topeColectivo: d.topeColectivo,
       ajusteMinimo: redondear(prima - subtotal), diferenciacion: 0, prima,
     };

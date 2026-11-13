@@ -711,6 +711,8 @@ function ResumenCombo() {
 
 function ResumenRcg() {
   const rcg = useCotizacionStore((s) => s.rcg);
+  // El descuento y las tasas solo se muestran a perfiles técnicos; el cliente ve la prima final.
+  const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
   const cot = useCotizacionRcg();
   const m = (n: number) => `${rcg.moneda} ${importe(n)}`;
   const elegida = cot.alternativas.find((a) => a.opcion === rcg.opcion) ?? cot.alternativas[0];
@@ -727,6 +729,9 @@ function ResumenRcg() {
               </div>
               <p className="font-display text-2xl font-black gradient-text-indigo tabular-nums mt-1">{m(a.prima)}</p>
               <p className="text-[0.78rem] text-slate-500 mt-1">Límite: {m(a.limite)}</p>
+              {vistaTecnica && a.descuentoPct != null && a.tasaInicial != null && a.tasaAplicada != null && (
+                <p className="text-[0.72rem] text-slate-500 mt-1">Descuento {porcentaje(a.descuentoPct)}: tasa {porcentaje(a.tasaInicial)} → {porcentaje(Number(a.tasaAplicada.toFixed(5)))}</p>
+              )}
             </div>
           ))}
         </div>
@@ -768,6 +773,7 @@ function ResumenRc() {
                 </thead>
                 <tbody>
                   {([
+                    ...(r.opciones.some((o) => o.descuentoPct) ? [['Descuento por suma (% sobre la tasa)', (o) => o.descuentoPct ?? 0] as [string, (o: NonNullable<typeof r.opciones>[number]) => number]] : []),
                     ['Prima básica', (o) => o.primaBasica],
                     ['Ajuste', (o) => o.ajuste],
                     ['Coberturas adicionales', (o) => o.primaOpcionales],

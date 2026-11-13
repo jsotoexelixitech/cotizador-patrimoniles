@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
-  Banknote, Building2, Calculator, Download, FileText, Layers, ListChecks, Plus, RotateCcw, Scale, Search, ShieldAlert,
+  Banknote, Building2, Calculator, Download, FileText, Layers, ListChecks, Percent, Plus, RotateCcw, Scale, Search, ShieldAlert,
   Stamp, Trash2, Upload, Users,
 } from 'lucide-react';
 import { SectionCard } from '../components/ui/SectionCard';
@@ -14,6 +14,7 @@ import { esPersonalizado, exportarParametros, useParametrosStore } from '../stor
 import { toast } from '../store/toastStore';
 import { deducibleRcg, type ClaseRcg } from '../tarifas/rcg';
 import type { Rango } from '../tarifas/rcp-rce';
+import { erroresTramos, type TramoDescuento } from '../tarifas/descuentos';
 
 /** Input numérico que permite escribir libremente y solo publica valores válidos. */
 function Num({ value, onChange, step = 'any', className, sufijo }: { value: number; onChange: (n: number) => void; step?: string; className?: string; sufijo?: string }) {
@@ -76,6 +77,36 @@ const BotonIcono = ({ onClick, titulo, children }: { onClick: () => void; titulo
 );
 
 const rangoInvalido = (min: number, max: number) => !(min >= 0) || !(max >= min);
+
+/** Configurar descuentos: tramos «desde esta suma asegurada → % de descuento sobre la tasa básica». */
+function DescuentosCard({ tramos, onChange, ayuda }: { tramos: TramoDescuento[]; onChange: (t: TramoDescuento[]) => void; ayuda: string }) {
+  const errores = erroresTramos(tramos);
+  const setTramo = (i: number, c: Partial<TramoDescuento>) => onChange(tramos.map((x, j) => (j === i ? { ...x, ...c } : x)));
+  return (
+    <SectionCard title="Configurar descuentos" Icon={Percent}
+      description="Descuento sobre la tasa básica por suma asegurada elevada. Se aplica antes de calcular la prima; las primas mínimas se respetan."
+      statusLabel={tramos.length ? `${tramos.length} tramo${tramos.length > 1 ? 's' : ''}` : 'Sin descuento'} statusTone={tramos.length ? 'success' : undefined}>
+      {tramos.length > 0 && (
+        <Tabla cabecera={['Desde suma asegurada', 'Descuento sobre la tasa básica', '']}>
+          {tramos.map((t, i) => (
+            <tr key={i}>
+              <td><Num value={t.desde} onChange={(n) => setTramo(i, { desde: n })} /></td>
+              <td><Num value={t.pct} onChange={(n) => setTramo(i, { pct: n })} sufijo="%" /></td>
+              <td className="w-10"><BotonIcono titulo="Quitar tramo" onClick={() => onChange(tramos.filter((_, j) => j !== i))}><Trash2 size={14} /></BotonIcono></td>
+            </tr>
+          ))}
+        </Tabla>
+      )}
+      <div className="flex flex-wrap items-center gap-3 mt-3">
+        <Button variant="secondary" size="sm" onClick={() => onChange([...tramos, { desde: (tramos[tramos.length - 1]?.desde ?? 0) + 100000, pct: 5 }])}>
+          <Plus size={13} /> Agregar tramo
+        </Button>
+        <p className="text-[0.72rem] text-slate-500">{ayuda} A cada suma se le aplica el tramo más alto que alcanza.</p>
+      </div>
+      {errores.length > 0 && <div className="mt-3"><Aviso tono="error">{errores.join(' ')}</Aviso></div>}
+    </SectionCard>
+  );
+}
 
 export function ParametrosView() {
   const [pestana, setPestana] = useState<'rcg' | 'rc'>('rcg');
@@ -168,6 +199,9 @@ function ParametrosRcgView() {
         </div>
         {p.limiteMin >= p.limiteMax && <div className="mt-3"><Aviso tono="error">El límite mínimo debe ser menor que el máximo.</Aviso></div>}
       </SectionCard>
+
+      <DescuentosCard tramos={p.descuentos ?? []} onChange={(descuentos) => set({ descuentos })}
+        ayuda="RCG: se evalúa la suma asegurada de cada opción (I, II y III)." />
 
       <SectionCard title="Clases de riesgo" description="Rango de tasa (%) e índoles permitidas por clase. Una índole por línea." Icon={Building2}>
         <div className="space-y-3">
@@ -314,6 +348,9 @@ function ParametrosRcView() {
           ))}
         </div>
       </SectionCard>
+
+      <DescuentosCard tramos={p.descuentos ?? []} onChange={(descuentos) => set({ descuentos })}
+        ayuda="RCP / RCE en USD o EUR: se evalúa el límite por evento / año póliza de cada opción. En Bs. no aplica (la prima es un % del límite)." />
 
       <SectionCard title="Opciones RC Patronal" description="Montos por empleado de las coberturas adicionales y límites por opción." Icon={Users}>
         <Tabla cabecera={['Opción', 'Médica / empleado', 'Hernia / empleado', 'Límite individual (% nómina)', 'Tope individual (I = suma deseada máx.)', 'Tope colectivo']}>
