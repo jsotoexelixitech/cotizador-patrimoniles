@@ -313,7 +313,7 @@ export function EmisionStep() {
     });
     const bytes = await generarPdfRcg({
       numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: cotRc.simbolo,
-      indole: s.rc.indole, actividadEspecifica: res.map((r) => r.riesgo?.[0]).filter(Boolean).join(' · '), correo: c.correo, intermediario: c.intermediario,
+      indole: s.rc.indole, actividadEspecifica: res.map((r) => r.riesgo?.[0]).filter(Boolean).join(' / '), correo: c.correo, intermediario: c.intermediario,
       ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
       sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, elaboradoPor: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
       alternativas: [{ opcion: (res[0].opcion ?? 'I') as 'I' | 'II' | 'III', limite: Math.max(...res.map((r) => r.limites[2] ?? 0)), prima: cotRc.total, primaMinimaAplicada: false }],
