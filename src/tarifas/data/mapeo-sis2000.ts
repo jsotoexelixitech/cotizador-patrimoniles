@@ -75,8 +75,9 @@ export const MAPEO_RCP: MapeoCobertura[] = [
   { concepto: 'Gastos de entierro', ccober: { USD: '8' } },
   { concepto: 'Asistencia médica, quirúrgica y farmacéutica', ccober: { USD: '12' },
     ambigua: `Se usa 12 «GASTOS MEDICOS» (no hay una cobertura de asistencia médica, quirúrgica y farmacéutica; tampoco en Bs.). ${SUMA_POR_TRABAJADOR}` },
-  { concepto: 'Hernia', ccober: { BS: '13' }, ambigua: `Solo existe 13 «HERNIAS BS»: en USD y EUR no se puede emitir con hernia. ${SUMA_POR_TRABAJADOR}` },
-  { concepto: 'Hernias', ccober: { BS: '13' }, ambigua: SUMA_POR_TRABAJADOR },
+  // 21 «HERNIAS» USD creada en Sis2000_QA el 13-nov-2026 (configurador). Donde no exista (p. ej. producción), su prima va en la básica.
+  { concepto: 'Hernia', ccober: { USD: '21', BS: '13' }, ambigua: `USD: 21 «HERNIAS» (QA, 13-nov-2026); Bs.: 13 «HERNIAS BS»; en EUR va en la básica. ${SUMA_POR_TRABAJADOR}` },
+  { concepto: 'Hernias', ccober: { USD: '21', BS: '13' }, ambigua: SUMA_POR_TRABAJADOR },
 ];
 
 // ── RCE · ramo 37 ────────────────────────────────────────────────────────────────────────────────────────────────────

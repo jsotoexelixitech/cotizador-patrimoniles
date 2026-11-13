@@ -104,12 +104,16 @@ describe('RCP / RCE → Sis2000 ramos 27 y 37', () => {
     expect(e.lineas.filter((l) => ['2', '3', '4', '5', '6', '7', '8'].includes(l.ccober)).every((l) => l.prima === 0 && l.suma === r.limites[0])).toBe(true);
   });
 
-  it('RCP USD con hernia: sin código en USD, su prima va en la básica y no bloquea (manda la prima del cotizador)', () => {
+  it('RCP USD con hernia: línea 21 «HERNIAS» con su prima; si el ramo no la tiene, su prima va en la básica', () => {
     const conHernia = cotizarRc({ ...base, modo: 'p', p: { ...base.p, adicionales: [false, true] } });
     const e = coberturasRc(conHernia.resultados[0], 'USD');
     expect(e.sinMapeo).toEqual([]);
-    expect(e.lineas.some((l) => /hernia/i.test(l.concepto))).toBe(false);
+    expect(e.lineas.find((l) => /hernia/i.test(l.concepto))?.ccober).toBe('21');
     expect(e.primaTotal).toBe(conHernia.resultados[0].prima);
+    // Catálogo sin la 21 (como producción hoy): no bloquea, la prima va en la básica.
+    const sin21 = coberturasRc(conHernia.resultados[0], 'USD', [{ ccober: '1', ctarifa: '1' }, { ccober: '12', ctarifa: '1' }] as never);
+    expect(sin21.lineas.some((l) => /hernia/i.test(l.concepto))).toBe(false);
+    expect(sin21.primaTotal).toBe(conHernia.resultados[0].prima);
   });
 
   it('RCE USD con negligencia y gastos médicos: 9 y 11 con su prima', () => {
