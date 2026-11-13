@@ -16,8 +16,12 @@ interface WizardState {
 
 export type Vista = 'cotizador' | 'parametros' | 'pastora';
 
+/** Link público (COTIZADOR_PUBLICO=1): siempre y solo el formulario de Pastora. */
+const SOLO_PASTORA = import.meta.env.VITE_SOLO_PASTORA === '1';
+
 /** ?vista=pastora abre directo la emisión de Pastora. */
 function vistaInicial(): Vista {
+  if (SOLO_PASTORA) return 'pastora';
   try {
     return new URLSearchParams(window.location.search).get('vista') === 'pastora' ? 'pastora' : 'cotizador';
   } catch {
@@ -31,12 +35,12 @@ export const useWizardStore = create<WizardState>((set) => ({
   step: 1,
   alcanzado: 1,
   vista: vistaInicial(),
-  setVista: (vista) => set({ vista }),
+  setVista: (vista) => set({ vista: SOLO_PASTORA ? 'pastora' : vista }),
   goTo: (step) => set((s) => ({ step: Math.min(Math.max(step, 1), s.alcanzado, maxStep) })),
   nextStep: () => set((s) => {
     const step = Math.min(s.step + 1, maxStep);
     return { step, alcanzado: Math.max(s.alcanzado, step) };
   }),
   prevStep: () => set((s) => ({ step: Math.max(s.step - 1, 1) })),
-  reset: () => set({ step: 1, alcanzado: 1, vista: 'cotizador' }),
+  reset: () => set({ step: 1, alcanzado: 1, vista: SOLO_PASTORA ? 'pastora' : 'cotizador' }),
 }));

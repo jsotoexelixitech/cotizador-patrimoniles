@@ -25,6 +25,9 @@ const VISTA_PASTORA = {
   description: 'Póliza de biomasa ganadera: suma asegurada = kg iniciales × precio por kg. La prima la calcula nest-api.',
 };
 
+/** Link público (COTIZADOR_PUBLICO=1): solo el formulario de Pastora, sin volver al cotizador. */
+const SOLO_PASTORA = import.meta.env.VITE_SOLO_PASTORA === '1';
+
 /** Cascarón visual RCV: aurora + progreso + stepper píldora + cabecera + ayuda + toasts. */
 export function ModuleShell({ children }: { children: ReactNode }) {
   const step = useWizardStore((s) => s.step);
@@ -68,7 +71,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 </p>
               </div>
 
-              <div className="no-imprimir flex items-center gap-2">
+              {!SOLO_PASTORA && <div className="no-imprimir flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => toast.info('¿Necesitas ayuda?', 'Las actividades restringidas se cotizan aquí, sujetas a aprobación de la mesa técnica. Límites mayores o tasas fuera de rango se cotizan con el Área Técnica de La Mundial.')}
@@ -97,7 +100,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                   {pastora ? <ArrowLeft size={13} /> : <Beef size={13} />}
                   {pastora ? 'Volver al cotizador' : 'Pastora'}
                 </button>
-              </div>
+              </div>}
             </div>
           </header>
 

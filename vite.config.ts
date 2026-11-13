@@ -32,6 +32,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: process.env.VITE_APP_BASE || '/',
+    // Link público: la app abre solo el formulario de Pastora (ModuleShell / wizardStore).
+    define: { 'import.meta.env.VITE_SOLO_PASTORA': JSON.stringify(publico ? '1' : '') },
     plugins: [react(), tailwindcss()],
     server: { host: true, port: 5180, proxy, ...(publico ? { allowedHosts: ['.trycloudflare.com'] } : {}) },
     preview: { proxy },
