@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Printer, RotateCcw, ShieldCheck, Stamp, User } from 'lucide-react';
+import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Mail, Printer, RotateCcw, Send, ShieldCheck, Stamp, User } from 'lucide-react';
 import { documentosRcg, documentosRcgSis2000, urlDocumento, type DocumentoRcg } from '../pdf/condicionadosRcg';
 import { useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
@@ -28,6 +28,7 @@ import { armarEmisionInformada, coberturasRc, coberturasRcg, faltantesEmisionRc,
 import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
 import { emitirCoberturas } from '../api/patrimonial';
 import type { ResultadoEmision } from '../tarifas/planes-rcg';
+import { correoValido, errorTamanoPdf, tamanoLegible } from '../correo/correoCotizacion';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -35,6 +36,87 @@ function Dato({ label, children }: { label: string; children: ReactNode }) {
       <p className="text-[0.65rem] font-bold uppercase tracking-wider text-slate-400">{label}</p>
       <p className="text-sm text-slate-800 font-medium mt-0.5 break-words">{children || '—'}</p>
     </div>
+  );
+}
+
+/** PDF de la cotización en memoria: bytes, nombre del archivo, detalle para el aviso y producto para el correo. */
+type PdfCotizacion = { bytes: Uint8Array; nombre: string; detalle: string; producto: string };
+
+// Link público (COTIZADOR_PUBLICO=1): el proxy no deja pasar la ruta de correo, así que el botón no se muestra.
+const SOLO_PASTORA = import.meta.env.VITE_SOLO_PASTORA === '1';
+
+type EstadoEnvio = 'editando' | 'confirmando' | 'enviando' | 'enviado' | 'error';
+
+/** Envío de la cotización por correo: mismo PDF que «Descargar», al correo del tomador (editable) con confirmación. */
+function EnviarCorreoCotizacion({ correoInicial, nombre, numero, vigenciaDias, generar, onCerrar }: {
+  correoInicial: string; nombre: string; numero: string; vigenciaDias: number;
+  generar: () => Promise<PdfCotizacion>; onCerrar: () => void;
+}) {
+  const [correo, setCorreo] = useState(correoInicial.trim());
+  const [estado, setEstado] = useState<EstadoEnvio>('editando');
+  const [mensaje, setMensaje] = useState('');
+  const valido = correoValido(correo);
+
+  const enviar = async () => {
+    setEstado('enviando');
+    setMensaje('Generando el PDF…');
+    try {
+      const pdf = await generar();
+      const errTam = errorTamanoPdf(pdf.bytes.length);
+      if (errTam) throw new Error(errTam);
+      setMensaje(`Enviando PDF de ${tamanoLegible(pdf.bytes.length)}…`);
+      const { enviarCotizacionPorCorreo } = await import('../api/correo');
+      await enviarCotizacionPorCorreo({
+        correo, nombre, numero, producto: pdf.producto, vigenciaDias, pdf: pdf.bytes, nombreArchivo: pdf.nombre,
+      });
+      setEstado('enviado');
+      setMensaje(`Cotización ${numero} enviada a ${correo.trim().toLowerCase()}.`);
+      toast.success('Cotización enviada por correo', `${numero} → ${correo.trim().toLowerCase()}`);
+    } catch (e) {
+      setEstado('error');
+      setMensaje(e instanceof Error ? e.message : String(e));
+      toast.error('No se pudo enviar la cotización', e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  const ocupado = estado === 'enviando';
+  return (
+    <SectionCard title="Enviar cotización por correo" Icon={Mail} statusLabel={estado === 'enviado' ? 'Enviada' : undefined} statusTone="success"
+      description="Se envía el mismo PDF de «Descargar cotización PDF» como adjunto.">
+      <div className="grid sm:grid-cols-2 gap-4 items-start">
+        <Field label="Correo del destinatario" error={correo && !valido ? 'Introduce un correo electrónico válido.' : undefined}
+          hint="Precargado con el correo del tomador / asegurado; puedes cambiarlo.">
+          <Input type="email" value={correo} maxLength={150} disabled={ocupado}
+            onChange={(e) => { setCorreo(e.target.value); if (estado !== 'enviando') setEstado('editando'); }} placeholder="correo@empresa.com" />
+        </Field>
+        <div className="flex flex-wrap gap-2 sm:pt-7">
+          {estado === 'confirmando' ? (
+            <>
+              <Button variant="primary" onClick={enviar}><Send size={14} /> Sí, enviar</Button>
+              <Button variant="ghost" onClick={() => setEstado('editando')}>Cancelar</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="primary" disabled={!valido || ocupado} onClick={() => setEstado('confirmando')}>
+                {ocupado ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                {ocupado ? 'Enviando…' : estado === 'enviado' ? 'Enviar de nuevo' : 'Enviar'}
+              </Button>
+              <Button variant="ghost" disabled={ocupado} onClick={onCerrar}>Cerrar</Button>
+            </>
+          )}
+        </div>
+      </div>
+      {estado === 'confirmando' && (
+        <p className="mt-3 text-[0.8rem] text-slate-700">
+          ¿Enviar la cotización <strong>{numero}</strong> a <strong>{correo.trim().toLowerCase()}</strong>?
+        </p>
+      )}
+      {mensaje && estado !== 'editando' && estado !== 'confirmando' && (
+        estado === 'error'
+          ? <div className="mt-3"><Aviso tono="error">{mensaje}</Aviso></div>
+          : <p className={`mt-3 text-[0.8rem] ${estado === 'enviado' ? 'text-emerald-700 font-semibold' : 'text-slate-600'}`}>{mensaje}</p>
+      )}
+    </SectionCard>
   );
 }
 
@@ -58,6 +140,7 @@ export function EmisionStep() {
   const vistaTecnica = useParametrosStore((p) => p.vistaTecnica);
   const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
   const [generando, setGenerando] = useState(false);
+  const [correoAbierto, setCorreoAbierto] = useState(false);
   // Número provisional hasta tener el correlativo oficial desde el backend.
   const [numero] = useState(() => `RCG-${new Date().getFullYear()}-P${String(Date.now()).slice(-6)}`);
 
@@ -69,11 +152,11 @@ export function EmisionStep() {
 
   const nueva = () => { s.reset(); resetPlanes(); resetWizard(); window.scrollTo({ top: 0 }); };
 
-  const descargarRcg = async () => {
-    setGenerando(true);
-    try {
+  /** PDF en memoria (el mismo para descargar y para el correo). */
+  const generarRcg = async (): Promise<PdfCotizacion> => {
+    {
       // pdf-lib y las imágenes de la solicitud se cargan solo al generar el PDF.
-      const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+      const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
       const { cargarCondicionados, documentosRcg } = await import('../pdf/condicionadosRcg');
       const docs = documentosRcg(cotRcg.coberturas.map((x) => x.nombre), s.rcg.moneda);
       const assets = await cargarAssetsRcg();
@@ -85,24 +168,22 @@ export function EmisionStep() {
         sucursal: c.sucursal, elaboradoPor: c.emisor, alternativas: cotRcg.alternativas, coberturas: cotRcg.coberturas,
         deducible: cotRcg.deducible, notaIgtf: cotRcg.notaIgtf, condiciones: cotRcg.condiciones, vigenciaDias, mesaTecnica,
       }, assets);
-      descargarPdf(bytes, `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`);
-      toast.success('Cotización descargada', `${numero} · cotización + Solicitud de Seguro + condicionado, ${docs.length - 1} anexos y constancia de recepción.`);
-    } catch (e) {
-      toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
-    } finally {
-      setGenerando(false);
+      return {
+        bytes, nombre: `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`,
+        detalle: `${numero} · cotización + Solicitud de Seguro + condicionado, ${docs.length - 1} anexos y constancia de recepción.`,
+        producto: 'Responsabilidad Civil General',
+      };
     }
   };
 
   /** Mismo PDF oficial con la suma, la prima y las coberturas del plan de Sis2000. */
-  const descargarPlan = async () => {
+  const generarPlan = async (): Promise<PdfCotizacion> => {
     const plan = listaPlanes.find((p) => p.cplan === s.planSel);
-    if (!plan) { toast.error('No hay plan elegido', 'Vuelve al paso de cotización.'); return; }
+    if (!plan) throw new Error('No hay plan elegido: vuelve al paso de cotización.');
     const esRcg = plan.cramo === RAMO_RCG;
     const ramo = ramos.find((r) => r.cramo === plan.cramo)?.xramo ?? `Ramo ${plan.cramo}`;
-    setGenerando(true);
-    try {
-      const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+    {
+      const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
       const assets = await cargarAssetsRcg();
       if (docsSis2000.length) assets.condicionados = await (await import('../pdf/condicionadosRcg')).cargarCondicionados(docsSis2000);
       const bytes = await generarPdfRcg({
@@ -119,22 +200,20 @@ export function EmisionStep() {
         deducible: esRcg ? cotPlanes.deducible : '', notaIgtf: true, condiciones: esRcg ? cotPlanes.condiciones : [], vigenciaDias,
         plan: { ramo, nombre: plan.nombre, cplan: plan.cplan, esRcg }, mesaTecnica,
       }, assets);
-      descargarPdf(bytes, `Cotizacion_LaMundial_${plan.cplan}_${c.asegurado.trim().replace(/\s+/g, '_') || 'plan'}.pdf`);
-      toast.success('Cotización descargada', `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`);
-    } catch (e) {
-      toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
-    } finally {
-      setGenerando(false);
+      return {
+        bytes, nombre: `Cotizacion_LaMundial_${plan.cplan}_${c.asegurado.trim().replace(/\s+/g, '_') || 'plan'}.pdf`,
+        detalle: `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`,
+        producto: `${plan.nombre} (${ramo})`,
+      };
     }
   };
 
   /** Mismo PDF oficial con las coberturas y sumas del combo (formato de plan genérico, sin Solicitud RCG). */
-  const descargarCombo = async () => {
-    if (!cobCombo?.valida) { toast.error('El combo no está completo', 'Vuelve al paso de cotización.'); return; }
+  const generarCombo = async (): Promise<PdfCotizacion> => {
+    if (!cobCombo?.valida) throw new Error('El combo no está completo: vuelve al paso de cotización.');
     const { cot, moneda, cramo } = cobCombo;
-    setGenerando(true);
-    try {
-      const { cargarAssetsRcg, descargarPdf, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+    {
+      const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
       const assets = await cargarAssetsRcg();
       if (docsSis2000.length) assets.condicionados = await (await import('../pdf/condicionadosRcg')).cargarCondicionados(docsSis2000);
       const bytes = await generarPdfRcg({
@@ -147,14 +226,31 @@ export function EmisionStep() {
         deducible: '', notaIgtf: !/^bs/i.test(moneda), condiciones: [], vigenciaDias, mesaTecnica,
         plan: { ramo: xramoCombo, nombre: 'Combo de coberturas', cplan: `COMBO-${cramo}`, esRcg: false, combo: true },
       }, assets);
-      descargarPdf(bytes, `Cotizacion_LaMundial_Combo_${cramo}_${c.asegurado.trim().replace(/\s+/g, '_') || 'combo'}.pdf`);
-      toast.success('Cotización descargada', `${numero} · combo de ${xramoCombo}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`);
+      return {
+        bytes, nombre: `Cotizacion_LaMundial_Combo_${cramo}_${c.asegurado.trim().replace(/\s+/g, '_') || 'combo'}.pdf`,
+        detalle: `${numero} · combo de ${xramoCombo}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`,
+        producto: `combo de coberturas de ${xramoCombo}`,
+      };
+    }
+  };
+
+  const descargarCon = async (generar: () => Promise<PdfCotizacion>) => {
+    setGenerando(true);
+    try {
+      const { descargarPdf } = await import('../pdf/cotizacionRcgPdf');
+      const pdf = await generar();
+      descargarPdf(pdf.bytes, pdf.nombre);
+      toast.success('Cotización descargada', pdf.detalle);
     } catch (e) {
       toast.error('No se pudo generar el PDF', e instanceof Error ? e.message : String(e));
     } finally {
       setGenerando(false);
     }
   };
+  const descargarRcg = () => descargarCon(generarRcg);
+  const descargarPlan = () => descargarCon(generarPlan);
+  const descargarCombo = () => descargarCon(generarCombo);
+  const generarPdf = rcg ? generarRcg : combo ? generarCombo : generarPlan;
 
   return (
     <div className="space-y-5">
@@ -189,13 +285,27 @@ export function EmisionStep() {
         {(rcg || planes || combo) && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
       </p>
 
+      {correoAbierto && (rcg || planes || combo) && (
+        // vigenciaDias: la misma validez que imprime el PDF adjunto.
+        <EnviarCorreoCotizacion correoInicial={c.correo} nombre={c.asegurado} numero={numero} vigenciaDias={vigenciaDias}
+          generar={generarPdf} onCerrar={() => setCorreoAbierto(false)} />
+      )}
+
       <StepActions continueLabel="" extra={(
         <>
           {rcg || planes || combo ? (
-            <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : combo ? descargarCombo : descargarPlan} disabled={generando}>
-              {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-              {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
-            </Button>
+            <>
+              <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : combo ? descargarCombo : descargarPlan} disabled={generando}>
+                {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+                {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
+              </Button>
+              {!SOLO_PASTORA && (
+                <Button variant="secondary" size="lg" onClick={() => setCorreoAbierto(true)} disabled={correoAbierto}>
+                  <Mail size={15} />
+                  Enviar cotización por correo
+                </Button>
+              )}
+            </>
           ) : (
             <Button variant="secondary" size="lg" onClick={() => window.print()}>
               <Printer size={15} />
