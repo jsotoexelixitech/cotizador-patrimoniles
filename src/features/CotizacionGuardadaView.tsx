@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button';
 import { Field, Input } from '../components/ui/FormField';
 import { SectionCard } from '../components/ui/SectionCard';
 import { MODO_CLIENTE } from '../config/modoCliente';
+import { EnviarPolizaCorreo } from './EmisionStep';
 import { estadoParaReabrir, huellaCotizacion, type AlternativaGuardada, type DatosCotizacion, type Opcion } from '../cotizaciones/snapshot';
 import { cn } from '../lib/utils';
 import { documentosRcg, urlDocumento } from '../pdf/condicionadosRcg';
@@ -147,6 +148,11 @@ function Cotizacion({ codigo }: { codigo: string }) {
     const t = setInterval(() => { if (consultas.current++ < MAX_CONSULTAS) void cargar(true); }, ESPERA_MS);
     return () => clearInterval(t);
   }, [enEspera]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Si en esta pantalla se vio la cotización antes de emitirse (pago o reintento), al quedar emitida se envía
+  // sola la póliza con sus anexos al correo del tomador. Al reabrirla ya emitida no se reenvía (hay botón).
+  const vioSinEmitir = useRef(false);
+  if (cot && cot.estado !== 'emitida') vioSinEmitir.current = true;
 
   const volver = () => (admin ? setVista('cotizaciones') : reset());
 
@@ -358,6 +364,11 @@ function Cotizacion({ codigo }: { codigo: string }) {
               </ul>
             </SectionCard>
           )}
+          <EnviarPolizaCorreo
+            emision={{ cnpoliza: cot.poliza.cnpoliza, cnrecibo: cot.poliza.cnrecibo ?? '', urlpoliza: cot.poliza.urlpoliza ?? '' }}
+            prima={elegida ? m(elegida.prima) : undefined} docs={docs} producto={d.nombreProducto}
+            tomador={{ correo: d.tomador.correo, nombre: d.tomador.nombre, rif: d.tomador.rif }}
+            auto={vioSinEmitir.current} />
         </>
       )}
 

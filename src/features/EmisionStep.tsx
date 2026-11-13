@@ -565,13 +565,29 @@ async function descargarPdfPoliza(url: string): Promise<Uint8Array | null> {
 }
 
 /** Correo de la póliza al tomador: póliza (PDF o enlace) + condicionado y anexos con la constancia. Admin decide y confirma. */
-function EnviarPolizaCorreo({ emision, prima, docs, producto }: { emision: ResultadoEmision; prima?: string; docs: DocumentoRcg[]; producto: string }) {
-  const c = useCotizacionStore((x) => x.comun);
-  const [correo, setCorreo] = useState(c.correo.trim());
+/**
+ * `tomador`: datos del tomador cuando no vienen del asistente (cotización guardada en Nexus). `auto`: se envía solo una
+ * vez al montar (póliza recién emitida tras el pago en línea), sin confirmar.
+ */
+export function EnviarPolizaCorreo({ emision, prima, docs, producto, tomador, auto = false }: {
+  emision: ResultadoEmision; prima?: string; docs: DocumentoRcg[]; producto: string;
+  tomador?: { correo: string; nombre: string; rif: string }; auto?: boolean;
+}) {
+  const comun = useCotizacionStore((x) => x.comun);
+  const t = tomador ?? { correo: comun.correo, nombre: comun.asegurado, rif: rifCompleto(comun) };
+  const [correo, setCorreo] = useState(t.correo.trim());
   const [estado, setEstado] = useState<EstadoEnvio>('editando');
   const [mensaje, setMensaje] = useState('');
   const valido = correoValido(correo);
   const ocupado = estado === 'enviando';
+  // StrictMode monta el efecto dos veces en desarrollo: la ref evita el doble envío.
+  const autoEnviado = useRef(false);
+  useEffect(() => {
+    if (!auto || autoEnviado.current || !correoValido(t.correo.trim())) return;
+    autoEnviado.current = true;
+    void enviar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
 
   const enviar = async () => {
     setEstado('enviando');
@@ -589,13 +605,13 @@ function EnviarPolizaCorreo({ emision, prima, docs, producto }: { emision: Resul
         const { cargarCondicionados } = await import('../pdf/condicionadosRcg');
         const { cargarLogoRcg, generarPdfAnexosPoliza } = await import('../pdf/cotizacionRcgPdf');
         const [condicionados, logo] = await Promise.all([cargarCondicionados(docs), cargarLogoRcg()]);
-        const pdf = await generarPdfAnexosPoliza({ cnpoliza: emision.cnpoliza, asegurado: c.asegurado, rif: rifCompleto(c), fecha: new Date() }, condicionados, logo);
+        const pdf = await generarPdfAnexosPoliza({ cnpoliza: emision.cnpoliza, asegurado: t.nombre, rif: t.rif, fecha: new Date() }, condicionados, logo);
         adjuntos.push({ pdf, nombreArchivo: `Condicionado_y_anexos_${emision.cnpoliza}.pdf` });
       }
       setMensaje('Enviando…');
       const { enviarPolizaPorCorreo } = await import('../api/correo');
       await enviarPolizaPorCorreo({
-        correo, nombre: c.asegurado, cnpoliza: emision.cnpoliza, cnrecibo: emision.cnrecibo, producto, prima,
+        correo, nombre: t.nombre, cnpoliza: emision.cnpoliza, cnrecibo: emision.cnrecibo, producto, prima,
         urlpoliza: emision.urlpoliza || undefined, adjuntos,
       });
       setEstado('enviado');
