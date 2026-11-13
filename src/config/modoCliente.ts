@@ -21,4 +21,4 @@ const porHost = (() => {
 export const MODO_CLIENTE = import.meta.env.VITE_MODO_CLIENTE === '1' || porUrl || porHost;
 
 /** Sucursal y responsable que imprime el PDF cuando la cotización la hace el propio cliente. */
-export const EMISOR_CLIENTE = { sucursal: 'Caracas', emisor: 'Cotización en línea' } as const;
+export const EMISOR_CLIENTE = { sucursal: 'Caracas', emisor: 'Cotización en línea', correo: 'info@lamundialdeseguros.com' } as const;

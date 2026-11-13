@@ -7,6 +7,7 @@ import {
   cotizarRc, opcionalesDe, type BaseNomina, type IdOpcion, type Modo, type MonedaRc, type ProductoEntrada, type SolicitudRc,
 } from '../tarifas/rcp-rce';
 import { useParametrosStore } from './parametrosStore';
+import { EMISOR_CLIENTE, MODO_CLIENTE } from '../config/modoCliente';
 import type { PrimaTecnica } from '../tarifas/combo';
 
 /**
@@ -116,7 +117,9 @@ export const rifCompleto = (c: CotizacionState['comun']) => (c.documento ? `${c.
 export function solicitudRcg(s: Pick<CotizacionState, 'comun' | 'contrato' | 'rcg'>): SolicitudRcg {
   const { comun: c, contrato: k, rcg: r } = s;
   return {
-    sucursal: c.sucursal, usuario: c.emisor, correoUsuario: c.correoEmisor, asegurado: c.asegurado, rif: rifCompleto(c),
+    // Vista cliente: no se pide «¿Quién elabora?»; va la sucursal y el responsable de la cotización en línea.
+    sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, usuario: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
+    correoUsuario: MODO_CLIENTE ? EMISOR_CLIENTE.correo : c.correoEmisor, asegurado: c.asegurado, rif: rifCompleto(c),
     correoDestinatario: c.correo, intermediario: c.intermediario, ubicacion: c.ubicacion, moneda: r.moneda, clase: r.clase,
     indole: r.indole, actividadEspecifica: r.actividadEspecifica, esContrato: k.esContrato, numeroContrato: k.numero,
     objetoObra: k.objeto, coasegurado: k.coasegurado, limite: numeroONulo(r.limite), tasa: numeroONulo(r.tasa), condiciones: r.condiciones,
@@ -139,8 +142,9 @@ export function solicitudRc(s: Pick<CotizacionState, 'comun' | 'contrato' | 'rc'
     modo: rc.modo, moneda: rc.moneda, tasaBcv: numeroONulo(rc.tasaBcv), base: rc.base, monto: numeroONulo(rc.monto),
     empleados: numeroONulo(rc.empleados), clase: claseRc(rc), otraClase: rc.claseSel === 'other',
     actividad: rc.actividad === '' ? null : Number(rc.actividad), indole: rc.indole,
-    asegurado: c.asegurado, rif: rifCompleto(c), correo: c.correo, direccion: c.ubicacion, sucursal: c.sucursal,
-    emisor: c.emisor, correoEmisor: c.correoEmisor, intermediario: c.intermediario,
+    asegurado: c.asegurado, rif: rifCompleto(c), correo: c.correo, direccion: c.ubicacion,
+    sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, emisor: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
+    correoEmisor: MODO_CLIENTE ? EMISOR_CLIENTE.correo : c.correoEmisor, intermediario: c.intermediario,
     esContrato: k.esContrato, numeroContrato: k.numero, vigenciaContrato: k.vigencia, objetoContrato: k.objeto,
     sumaDeseada: numeroONulo(rc.sumaDeseada ?? ''), p: aEntrada(rc.p), e: aEntrada(rc.e),
   };
