@@ -43,6 +43,11 @@ export interface ParametrosRc {
   opcionesRce: OpcionRceDef[];
   /** Si las tres opciones dan la misma prima se multiplican por estos factores. */
   diferenciacion: number[];
+  /**
+   * Suma asegurada deseada (USD/EUR, por trabajador): multiplicadores de las opciones I, II y III.
+   * Cada opción queda con tope en su «tope individual»; la suma deseada no puede superar el tope de la opción I.
+   */
+  factoresSumaDeseada: number[];
   bs: {
     pctPrimaRcp: number;
     pctRce: number;
@@ -77,6 +82,7 @@ export const PARAMETROS_RC: ParametrosRc = {
     { negligencia: 10, defensa: 15, medica: 20 },
   ],
   diferenciacion: [1, 1.10, 1.15],
+  factoresSumaDeseada: [1, 2, 3],
   bs: {
     pctPrimaRcp: 35,
     pctRce: 60,
@@ -127,6 +133,34 @@ export function limitesOpcionalesRestringidos(individual: number, p: ParametrosR
   return { individual: porTrabajador, colectivo: Math.min(p.bs.limiteOpcional, redondear(porTrabajador * p.bs.multOpcionalColectivo)) };
 }
 
+/** Suma deseada máxima por trabajador: el tope individual de la opción I (así la opción I es exactamente lo pedido). */
+export const sumaDeseadaMaxima = (p: ParametrosRc = PARAMETROS_RC): number => p.opcionesRcp[0]?.topeIndividual ?? 0;
+
+/** Valida la suma deseada por trabajador; devuelve el mensaje de error o null si es válida. */
+export function validarSumaDeseada(suma: number | null, p: ParametrosRc = PARAMETROS_RC): string | null {
+  const max = sumaDeseadaMaxima(p);
+  if (suma === null || !Number.isFinite(suma) || suma <= 0) return 'La suma asegurada deseada debe ser un monto positivo.';
+  if (suma > max) return `La suma asegurada deseada no puede superar la máxima permitida (${max.toLocaleString('es-VE')} por trabajador).`;
+  if (redondear(suma) !== suma) return 'La suma asegurada deseada admite máximo 2 decimales.';
+  return null;
+}
+
+/**
+ * Límites por opción a partir de la suma deseada por trabajador: individual = suma × factor (con el tope individual
+ * de la opción), colectivo = individual × multiplicador (con el tope colectivo). Se descarta la opción cuyo límite
+ * individual no supere al de la anterior que quedó.
+ */
+export function limitesSumaDeseada(suma: number, p: ParametrosRc = PARAMETROS_RC): { id: IdOpcion; individual: number; colectivo: number }[] {
+  const salida: { id: IdOpcion; individual: number; colectivo: number }[] = [];
+  p.opcionesRcp.forEach((d, i) => {
+    const individual = redondear(Math.min(suma * (p.factoresSumaDeseada[i] ?? 1), d.topeIndividual));
+    const anterior = salida[salida.length - 1];
+    if (anterior && individual <= anterior.individual) return;
+    salida.push({ id: d.id, individual, colectivo: redondear(Math.min(individual * p.multiplicadorColectivo, d.topeColectivo)) });
+  });
+  return salida;
+}
+
 export interface OpcionRcp {
   id: IdOpcion;
   primaBasica: number;
@@ -151,20 +185,24 @@ export function diferenciarOpcionesIguales(opciones: OpcionRcp[], p: ParametrosR
   });
 }
 
-export function opcionesRcp(nomina: number, empleados: number, tasa: number, ajustePct: number, medica: boolean, hernia: boolean, p: ParametrosRc = PARAMETROS_RC): OpcionRcp[] {
+/** sumaDeseada (opcional): suma por trabajador elegida por el usuario; sin ella los límites salen de la nómina (Sheet). */
+export function opcionesRcp(nomina: number, empleados: number, tasa: number, ajustePct: number, medica: boolean, hernia: boolean, p: ParametrosRc = PARAMETROS_RC, sumaDeseada: number | null = null): OpcionRcp[] {
   if (!Number.isFinite(nomina) || nomina <= 0 || !Number.isInteger(empleados) || empleados < 1 || !Number.isFinite(tasa) || tasa < 0 || !Number.isFinite(ajustePct) || Math.abs(ajustePct) > p.ajusteMaximo) {
     throw new Error('Revisa la nómina, los empleados, la tasa y el ajuste de RCP.');
   }
   const base = redondear((nomina * tasa) / 100);
   const ajuste = redondear((base * ajustePct) / 100);
-  return diferenciarOpcionesIguales(p.opcionesRcp.map((d) => {
+  const porSuma = sumaDeseada !== null ? limitesSumaDeseada(sumaDeseada, p) : null;
+  const definiciones = porSuma ? p.opcionesRcp.filter((d) => porSuma.some((x) => x.id === d.id)) : p.opcionesRcp;
+  return diferenciarOpcionesIguales(definiciones.map((d) => {
     const detalle = [
       ...(medica ? [{ nombre: 'Asistencia médica, quirúrgica y farmacéutica', prima: redondear(empleados * d.medica) }] : []),
       ...(hernia ? [{ nombre: 'Hernia', prima: redondear(empleados * d.hernia) }] : []),
     ];
     const primaOpcionales = redondear(detalle.reduce((s, x) => s + x.prima, 0));
-    const individual = redondear(Math.min(nomina * d.factor, d.topeIndividual));
-    const colectivo = redondear(Math.min(individual * p.multiplicadorColectivo, d.topeColectivo));
+    const desdeSuma = porSuma?.find((x) => x.id === d.id);
+    const individual = desdeSuma ? desdeSuma.individual : redondear(Math.min(nomina * d.factor, d.topeIndividual));
+    const colectivo = desdeSuma ? desdeSuma.colectivo : redondear(Math.min(individual * p.multiplicadorColectivo, d.topeColectivo));
     const subtotal = redondear(base + ajuste + primaOpcionales);
     const prima = Math.max(p.primaMinima, subtotal);
     return {
@@ -177,10 +215,11 @@ export function opcionesRcp(nomina: number, empleados: number, tasa: number, aju
 
 export interface SeleccionRce { negligencia: boolean; defensa: boolean; medica: boolean }
 
-export function opcionesRce(nomina: number, empleados: number, tasa: number, ajustePct: number, sel: SeleccionRce, p: ParametrosRc = PARAMETROS_RC): OpcionRcp[] {
-  const compartidas = opcionesRcp(nomina, empleados, tasa, ajustePct, false, false, { ...p, diferenciacion: [1, 1, 1] });
-  return diferenciarOpcionesIguales(compartidas.map((b, i) => {
-    const d = p.opcionesRce[i];
+export function opcionesRce(nomina: number, empleados: number, tasa: number, ajustePct: number, sel: SeleccionRce, p: ParametrosRc = PARAMETROS_RC, sumaDeseada: number | null = null): OpcionRcp[] {
+  const compartidas = opcionesRcp(nomina, empleados, tasa, ajustePct, false, false, { ...p, diferenciacion: [1, 1, 1] }, sumaDeseada);
+  return diferenciarOpcionesIguales(compartidas.map((b) => {
+    // Por id y no por posición: con suma deseada puede faltar una opción descartada.
+    const d = p.opcionesRce[OPCIONES.indexOf(b.id)];
     const detalle = [
       ...(sel.negligencia ? [{ nombre: 'Negligencia del Empleador', prima: redondear(empleados * d.negligencia) }] : []),
       ...(sel.defensa ? [{ nombre: 'Asistencia Legal y Defensa Penal', prima: redondear(empleados * d.defensa) }] : []),
@@ -230,6 +269,8 @@ export interface SolicitudRc {
   numeroContrato: string;
   vigenciaContrato: string;
   objetoContrato: string;
+  /** USD/EUR: suma asegurada deseada por trabajador (null/ausente = límites por nómina, como el Sheet). */
+  sumaDeseada?: number | null;
   p: ProductoEntrada;
   e: ProductoEntrada;
 }
@@ -302,6 +343,11 @@ export function cotizarRc(s: SolicitudRc, prm: ParametrosRc = PARAMETROS_RC): Co
   if (!(pago > 0) || !(empleados >= 1) || !Number.isInteger(empleados)) {
     falla('riesgo', 'Ingresa un monto anual positivo y una cantidad entera de empleados.');
   }
+  // Suma deseada: solo USD/EUR. En Bs el límite es legal (salarios × trabajadores) y la prima es % de ese límite.
+  const sumaPedida = !ves && s.sumaDeseada != null ? s.sumaDeseada : null;
+  const errorSuma = sumaPedida !== null ? validarSumaDeseada(sumaPedida, prm) : null;
+  if (errorSuma) falla('cotizacion', errorSuma);
+  const sumaDeseada = errorSuma ? null : sumaPedida;
 
   const resultados: ResultadoProducto[] = [];
   for (const k of activos) {
@@ -321,18 +367,21 @@ export function cotizarRc(s: SolicitudRc, prm: ParametrosRc = PARAMETROS_RC): Co
     let primaCalculada: number;
     let prima: number;
     let opciones: OpcionRcp[] | null = null;
+    let opcionElegida: IdOpcion | null = null;
     let nota = '';
 
     if (!ves) {
       // USD / EUR: tres opciones con primas por empleado para las coberturas adicionales.
       try {
         opciones = k === 'p'
-          ? opcionesRcp(nomina, empleados, tasa, ajuste, !!ent.adicionales[0], !!ent.adicionales[1], prm)
-          : opcionesRce(nomina, empleados, tasa, ajuste, { negligencia: !!ent.adicionales[0], defensa: !!ent.adicionales[1], medica: !!ent.adicionales[2] }, prm);
+          ? opcionesRcp(nomina, empleados, tasa, ajuste, !!ent.adicionales[0], !!ent.adicionales[1], prm, sumaDeseada)
+          : opcionesRce(nomina, empleados, tasa, ajuste, { negligencia: !!ent.adicionales[0], defensa: !!ent.adicionales[1], medica: !!ent.adicionales[2] }, prm, sumaDeseada);
       } catch {
         opciones = null;
       }
-      const elegida = opciones?.find((o) => o.id === ent.opcion) ?? null;
+      // Si la opción marcada se descartó (suma deseada con tope), se toma la más alta que quedó.
+      const elegida = opciones?.find((o) => o.id === ent.opcion) ?? opciones?.[opciones.length - 1] ?? null;
+      opcionElegida = elegida?.id ?? ent.opcion;
       limites = elegida ? [...elegida.limites] : [0, 0, 0];
       prima = elegida?.prima ?? 0;
       primaCalculada = prima;
@@ -374,7 +423,7 @@ export function cotizarRc(s: SolicitudRc, prm: ParametrosRc = PARAMETROS_RC): Co
     }
     resultados.push({
       k, riesgo, tasaEfectiva: tasaTotal * (1 + ajuste / 100), limites, prima, primaCalculada,
-      opciones, opcion: ves ? null : ent.opcion,
+      opciones, opcion: ves ? null : opcionElegida,
       lineas: lineas.map(({ nombre, tasa: t }) => ({ nombre, tasa: t })), nota,
     });
   }

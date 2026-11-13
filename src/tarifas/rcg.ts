@@ -132,6 +132,29 @@ export function alternativasRcg(limite: number, tasa: number, moneda: MonedaRcg,
   });
 }
 
+/**
+ * Mensaje claro para la suma asegurada deseada (texto del input) contra el mínimo y el máximo de Parámetros.
+ * null si está vacía (la exige cotizarRcg) o es válida.
+ */
+export function errorSumaRcg(texto: string, p: ParametrosRcg = PARAMETROS_RCG): string | null {
+  if (texto.trim() === '') return null;
+  const n = Number(texto);
+  const miles = (x: number) => x.toLocaleString('es-VE');
+  if (!Number.isFinite(n)) return 'Escribe un monto válido.';
+  if (n > p.limiteMax) return `La suma asegurada no puede superar la máxima permitida (${miles(p.limiteMax)}).`;
+  if (n < p.limiteMin) return `La suma asegurada mínima es ${miles(p.limiteMin)}.`;
+  if (redondear(n) !== n) return 'La suma asegurada admite máximo 2 decimales.';
+  return null;
+}
+
+/** Texto que explica cómo salen las opciones I, II y III a partir de la suma elegida. */
+export function descripcionOpcionesRcg(p: ParametrosRcg = PARAMETROS_RCG): string {
+  const [f1 = 1, f2 = 2, f3 = 3] = p.factoresOpciones;
+  const veces = (f: number) => (f === 1 ? 'la suma elegida' : `la suma × ${f}`);
+  return `Opción I: ${veces(f1)} · Opción II: ${veces(f2)} · Opción III: ${veces(f3)}, con tope en ${p.limiteMax.toLocaleString('es-VE')}. ` +
+    'La opción que no supere a la anterior no se muestra.';
+}
+
 export function sublimite(cobertura: string, limite: number, p: ParametrosRcg = PARAMETROS_RCG): number {
   return cobertura in p.sublimites ? Math.min(limite * (p.pctSublimite / 100), p.sublimites[cobertura]) : limite;
 }
