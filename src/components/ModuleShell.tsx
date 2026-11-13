@@ -122,7 +122,8 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                   {vista === 'parametros' ? <ArrowLeft size={13} /> : <Settings2 size={13} />}
                   {vista === 'parametros' ? 'Volver al cotizador' : 'Parámetros'}
                 </button>
-                <button
+                {/* Pastora oculta en el cotizador: se abre solo con ?vista=pastora o con el link público (COTIZADOR_PUBLICO=1). */}
+                {pastora && <button
                   type="button"
                   onClick={() => { setVista(pastora ? 'cotizador' : 'pastora'); window.scrollTo({ top: 0 }); }}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all hover:-translate-y-0.5 ${
@@ -131,7 +132,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 >
                   {pastora ? <ArrowLeft size={13} /> : <Beef size={13} />}
                   {pastora ? 'Volver al cotizador' : 'Pastora'}
-                </button>
+                </button>}
                 </>}
               </div>}
               {/* Vista cliente: desde cualquier pantalla se vuelve a la portada (nueva cotización o traer una por código). */}
