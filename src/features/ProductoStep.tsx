@@ -14,14 +14,16 @@ import { usePlanesStore } from '../store/planesStore';
 import { planesContenedor } from '../tarifas/combo';
 import { toast } from '../store/toastStore';
 import type { Modo } from '../tarifas/rcp-rce';
+import { MODO_CLIENTE } from '../config/modoCliente';
+import { CotizacionesView } from './CotizacionesView';
 
 const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; Icon: typeof Building2 }[] = [
   {
-    id: 'rcg', nombre: 'Responsabilidad Civil General', detalle: 'Tarifa RCG · igual al cotizador de Google', Icon: Building2,
+    id: 'rcg', nombre: 'Responsabilidad Civil General', detalle: 'Tarifa RCG', Icon: Building2,
     desc: 'Daños a terceros por la actividad del asegurado. Tú defines límite y tasa; tres opciones (I, II y III), con o sin contrato.',
   },
   {
-    id: 'rc', nombre: 'RC Patronal / Empresarial', detalle: 'RCP · RCE · igual al cotizador de Google', Icon: HardHat,
+    id: 'rc', nombre: 'RC Patronal / Empresarial', detalle: 'RCP · RCE', Icon: HardHat,
     desc: 'Responsabilidad del patrono frente a sus trabajadores (LOPCYMAT), calculada sobre la nómina anual.',
   },
   {
@@ -195,6 +197,9 @@ export function ProductoStep() {
         if (producto === 'combo') return comboListo();
         return true;
       }} />
+
+      {/* Admin: las cotizaciones guardadas (vigentes por defecto, con historial) debajo de elegir producto. */}
+      {!MODO_CLIENTE && <CotizacionesView />}
     </div>
   );
 }
