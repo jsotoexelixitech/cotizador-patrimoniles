@@ -9,6 +9,7 @@ import { CORREO_RE, SUCURSALES } from '../tarifas/comun';
 import { VIGENCIAS_CONTRATO } from '../tarifas/rcp-rce';
 import { useCotizacionStore, type CotizacionState } from '../store/cotizacionStore';
 import { toast } from '../store/toastStore';
+import { MODO_CLIENTE } from '../config/modoCliente';
 
 type Errores = Partial<Record<string, string>>;
 
@@ -23,10 +24,13 @@ function validar(s: CotizacionState): Errores {
   if (rcg && !CORREO_RE.test(c.correo.trim())) e.correo = 'El correo del tomador es obligatorio y debe ser válido.';
   if (!rcg && c.correo && !CORREO_RE.test(c.correo.trim())) e.correo = 'Introduce un correo electrónico válido.';
   if (!rcg && !c.ubicacion.trim()) e.ubicacion = 'Indica la ubicación del riesgo.';
-  if (!SUCURSALES.includes(c.sucursal)) e.sucursal = 'Selecciona la sucursal.';
-  if (!c.emisor.trim()) e.emisor = 'Indica quién elabora la cotización.';
-  if (!rcg && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Introduce el correo de quien cotiza.';
-  if (rcg && c.correoEmisor && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Correo con formato inválido.';
+  // Vista cliente: «¿Quién elabora la cotización?» no se muestra; el PDF lleva EMISOR_CLIENTE.
+  if (!MODO_CLIENTE) {
+    if (!SUCURSALES.includes(c.sucursal)) e.sucursal = 'Selecciona la sucursal.';
+    if (!c.emisor.trim()) e.emisor = 'Indica quién elabora la cotización.';
+    if (!rcg && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Introduce el correo de quien cotiza.';
+    if (rcg && c.correoEmisor && !CORREO_RE.test(c.correoEmisor.trim())) e.correoEmisor = 'Correo con formato inválido.';
+  }
   // Emitir en Sis2000 exige identificación (RIF/cédula hasta 9 dígitos), teléfono y dirección.
   if (producto === 'planes') {
     const digitos = c.documento.replace(/\D/g, '');
@@ -84,16 +88,18 @@ export function TomadorStep() {
               <Input type="tel" value={c.telefono} maxLength={20} onChange={(e) => setComun({ telefono: e.target.value })} placeholder="0412 1234567" />
             </Field>
           )}
-          <Field label="Intermediario (opcional)">
-            <Input value={c.intermediario} onChange={(e) => setComun({ intermediario: e.target.value })} placeholder="Nombre o código" />
-          </Field>
+          {!MODO_CLIENTE && (
+            <Field label="Intermediario (opcional)">
+              <Input value={c.intermediario} onChange={(e) => setComun({ intermediario: e.target.value })} placeholder="Nombre o código" />
+            </Field>
+          )}
           <Field label={rcg && !planes ? 'Ubicación del riesgo (opcional)' : 'Ubicación del riesgo'} error={errores.ubicacion} full>
             <Textarea rows={2} value={c.ubicacion} onChange={(e) => setComun({ ubicacion: e.target.value })} placeholder="Estado, ciudad, urbanización, calle…" />
           </Field>
         </div>
       </SectionCard>
 
-      <SectionCard title="¿Quién elabora la cotización?" description="Sucursal y responsable que aparecen en el documento." Icon={BadgeCheck}>
+      {!MODO_CLIENTE && <SectionCard title="¿Quién elabora la cotización?" description="Sucursal y responsable que aparecen en el documento." Icon={BadgeCheck}>
         <div className="grid sm:grid-cols-2 gap-4">
           <Field label="Sucursal" error={errores.sucursal}>
             <Select value={c.sucursal} onChange={(e) => setComun({ sucursal: e.target.value })}>
@@ -108,7 +114,7 @@ export function TomadorStep() {
             <Input type="email" value={c.correoEmisor} maxLength={150} onChange={(e) => setComun({ correoEmisor: e.target.value })} placeholder="usuario@lamundialdeseguros.com" />
           </Field>
         </div>
-      </SectionCard>
+      </SectionCard>}
 
       <ToggleSwitch
         checked={k.esContrato}

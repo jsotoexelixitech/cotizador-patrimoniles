@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { PARAMETROS_RCG, type ParametrosRcg } from '../tarifas/rcg';
 import { PARAMETROS_RC, type ParametrosRc } from '../tarifas/rcp-rce';
+import { MODO_CLIENTE } from '../config/modoCliente';
 
 /** Copia profunda para no mutar nunca los valores oficiales. */
 const clonar = <T,>(x: T): T => JSON.parse(JSON.stringify(x)) as T;
@@ -39,7 +40,8 @@ export const useParametrosStore = create<ParametrosState>()(
       vistaTecnica: false,
       setRcg: (c) => set((s) => ({ rcg: { ...s.rcg, ...c }, actualizado: ahora() })),
       setRc: (c) => set((s) => ({ rc: { ...s.rc, ...c }, actualizado: ahora() })),
-      setVistaTecnica: (vistaTecnica) => set({ vistaTecnica }),
+      // Vista cliente: nunca la técnica (ni por localStorage ni por el interruptor).
+      setVistaTecnica: (vistaTecnica) => set({ vistaTecnica: vistaTecnica && !MODO_CLIENTE }),
       restaurar: (que) => set((s) => ({
         rcg: que === 'rc' ? s.rcg : clonar(PARAMETROS_RCG),
         rc: que === 'rcg' ? s.rc : clonar(PARAMETROS_RC),
@@ -67,7 +69,7 @@ export const useParametrosStore = create<ParametrosState>()(
           rcg: { ...actual.rcg, ...(g.rcg ?? {}) },
           rc: { ...actual.rc, ...(g.rc ?? {}), bs: { ...actual.rc.bs, ...(g.rc?.bs ?? {}) } },
           actualizado: g.actualizado ?? null,
-          vistaTecnica: g.vistaTecnica === true,
+          vistaTecnica: g.vistaTecnica === true && !MODO_CLIENTE,
         };
       },
     },

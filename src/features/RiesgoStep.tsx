@@ -10,6 +10,7 @@ import { useParametrosStore } from '../store/parametrosStore';
 import { actividadesDeClase, tasaMedia, type BaseNomina, type MonedaRc } from '../tarifas/rcp-rce';
 import { claseRc, useCotizacionRc, useCotizacionRcg, useCotizacionStore, useMesaTecnica } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
+import { MODO_CLIENTE } from '../config/modoCliente';
 import { RAMO_RCG } from '../tarifas/planes-rcg';
 import { toast } from '../store/toastStore';
 
@@ -82,12 +83,12 @@ export function CamposClaseRcg({ errorIndole }: { errorIndole?: string }) {
   const clase = prm.clases[rcg.clase] ?? prm.clases[0];
   return (
     <>
-          <Field label="Clase de riesgo" full hint={`Rango de tasa: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`}>
+          <Field label="Clase de riesgo" full hint={MODO_CLIENTE ? undefined : `Rango de tasa: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`}>
             <Select value={rcg.clase} onChange={(e) => {
               const i = Number(e.target.value);
               setRcg({ clase: i, tasa: String(tasaPromedio(prm.clases[i])) });
             }}>
-              {prm.clases.map((c, i) => <option key={c.nombre} value={i}>{c.etiqueta} ({c.min.toFixed(2)} % – {c.max.toFixed(2)} %)</option>)}
+              {prm.clases.map((c, i) => <option key={c.nombre} value={i}>{c.etiqueta}{MODO_CLIENTE ? '' : ` (${c.min.toFixed(2)} % – ${c.max.toFixed(2)} %)`}</option>)}
             </Select>
           </Field>
           <Field label="Índole específica" full error={errorIndole}
@@ -119,7 +120,7 @@ function RiesgoRcg() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Clase de riesgo" description="Define el rango de tasa permitido." Icon={Building2}>
+      <SectionCard title="Clase de riesgo" description={MODO_CLIENTE ? "Actividad del negocio a asegurar." : "Define el rango de tasa permitido."} Icon={Building2}>
         <div className="grid sm:grid-cols-2 gap-4">
           <CamposClaseRcg errorIndole={err('indole')} />
           <Field label="Actividad específica" full error={err('actividadEspecifica')}>
@@ -170,7 +171,7 @@ export function CamposClaseRc({ intento, conActividad = true, conIndole = true }
               <Input value={rc.indole} onChange={(e) => setRc({ indole: e.target.value })} placeholder="Ej. Venta de repuestos automotrices" />
             </Field>
           )}
-          <Field label="Clase común" full hint={clase !== null ? `Patronal: ${porcentaje(prmRc.clases[clase][1])} – ${porcentaje(prmRc.clases[clase][2])}` : undefined}>
+          <Field label="Clase común" full hint={clase !== null && !MODO_CLIENTE ? `Patronal: ${porcentaje(prmRc.clases[clase][1])} – ${porcentaje(prmRc.clases[clase][2])}` : undefined}>
             <Select value={rc.claseSel} onChange={(e) => {
               const v = e.target.value;
               setRc({ claseSel: v, claseRelacionada: '' });
@@ -198,7 +199,7 @@ export function CamposClaseRc({ intento, conActividad = true, conIndole = true }
                 </div>
               </Field>
               <Field label={`Actividad del riesgo (${filtradas.length})`}
-                hint={actividad ? `Empresarial: ${porcentaje(actividad[1])} – ${porcentaje(actividad[2])}` : undefined}
+                hint={actividad && !MODO_CLIENTE ? `Empresarial: ${porcentaje(actividad[1])} – ${porcentaje(actividad[2])}` : undefined}
                 error={intento && rc.actividad === '' ? 'Selecciona una actividad vinculada a la clase.' : undefined}>
                 <Select value={rc.actividad} onChange={(e) => {
                   setRc({ actividad: e.target.value });

@@ -10,6 +10,7 @@ import { useWizardStore } from '../store/wizardStore';
 import { useCotizacionStore } from '../store/cotizacionStore';
 import { esPersonalizado, useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
+import { MODO_CLIENTE } from '../config/modoCliente';
 
 const NOMBRE_PRODUCTO = { rcg: 'RC General', rc: 'RC Patronal / Empresarial', planes: 'Planes Sis2000 (prueba)', combo: 'Combo de coberturas' } as const;
 
@@ -80,6 +81,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                   <HelpCircle size={13} />
                   ¿Necesitas ayuda?
                 </button>
+                {!MODO_CLIENTE && <>
                 <button
                   type="button"
                   onClick={() => { setVista(vista === 'parametros' ? 'cotizador' : 'parametros'); window.scrollTo({ top: 0 }); }}
@@ -100,6 +102,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                   {pastora ? <ArrowLeft size={13} /> : <Beef size={13} />}
                   {pastora ? 'Volver al cotizador' : 'Pastora'}
                 </button>
+                </>}
               </div>}
             </div>
           </header>

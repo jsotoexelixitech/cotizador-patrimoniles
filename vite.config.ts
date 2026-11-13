@@ -13,6 +13,15 @@ export default defineConfig(({ mode }) => {
   const publico = (process.env.COTIZADOR_PUBLICO || env.COTIZADOR_PUBLICO) === '1';
   const rutaPastora = (url: string) =>
     /^\/nest\/api\/v1\/riesgos-generales\/(cotizacion|emision)(\?|$)/.test(url);
+  // COTIZADOR_CLIENTE=1 (link al cliente): vista cliente; la key solo sirve para leer catálogos y enviar la cotización
+  // por correo. Nunca emite.
+  const cliente = (process.env.COTIZADOR_CLIENTE || env.COTIZADOR_CLIENTE) === '1';
+  const rutaCliente = (req: { url?: string; method?: string }) => {
+    const url = req.url ?? '';
+    if (req.method === 'POST') return /^\/nest\/api\/v1\/mail\/send(\?|$)/.test(url);
+    return req.method === 'GET'
+      && /^\/nest\/api\/v1\/(valrep\/planes\/riesgos-generales|riesgos-generales\/(coberturas|ramos))(\?|$)/.test(url);
+  };
   const proxy: Record<string, ProxyOptions> | undefined = target
     ? {
         '/nest': {
@@ -24,6 +33,7 @@ export default defineConfig(({ mode }) => {
           bypass: (req) => {
             const url = req.url ?? '';
             if (publico && !rutaPastora(url)) return false;
+            if (cliente && !rutaCliente(req)) return false;
             return !esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(url) ? false : undefined;
           },
         },
@@ -33,9 +43,12 @@ export default defineConfig(({ mode }) => {
   return {
     base: process.env.VITE_APP_BASE || '/',
     // Link público: la app abre solo el formulario de Pastora (ModuleShell / wizardStore).
-    define: { 'import.meta.env.VITE_SOLO_PASTORA': JSON.stringify(publico ? '1' : '') },
+    define: {
+      'import.meta.env.VITE_SOLO_PASTORA': JSON.stringify(publico ? '1' : ''),
+      'import.meta.env.VITE_MODO_CLIENTE': JSON.stringify(cliente ? '1' : ''),
+    },
     plugins: [react(), tailwindcss()],
-    server: { host: true, port: 5180, proxy, ...(publico ? { allowedHosts: ['.trycloudflare.com'] } : {}) },
+    server: { host: true, port: 5180, proxy, ...(publico || cliente ? { allowedHosts: ['.trycloudflare.com'] } : {}) },
     preview: { proxy },
   };
 });

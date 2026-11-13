@@ -23,6 +23,8 @@ import { coberturasOtraMoneda, coberturasSinTarifa, monedaBaseCombo, monedaCober
 import { NOMBRE_COTIZADOR, type TarifaOficial } from '../tarifas/combo-rc';
 import { toast } from '../store/toastStore';
 import { AvisoMesaTecnica, CamposClaseRc, CamposClaseRcg, CamposNominaRc } from './RiesgoStep';
+import { SliderSuma } from '../components/ui/SliderSuma';
+import { MODO_CLIENTE } from '../config/modoCliente';
 
 export function CotizacionStep() {
   const producto = useCotizacionStore((s) => s.producto);
@@ -106,19 +108,23 @@ function CotizacionRcg() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Suma asegurada y tasa" description={`Clase: ${clase.etiqueta}`} Icon={Calculator}>
+      <SectionCard title={MODO_CLIENTE ? 'Suma asegurada' : 'Suma asegurada y tasa'} description={`Clase: ${clase.etiqueta}`} Icon={Calculator}>
         <div className="grid sm:grid-cols-3 gap-4">
           <Field label="Moneda">
             <Select value={rcg.moneda} onChange={(e) => setRcg({ moneda: e.target.value as MonedaRcg })}>
               {MONEDAS_RCG.map((x) => <option key={x} value={x}>{x}</option>)}
             </Select>
           </Field>
-          <Field label="Suma asegurada deseada" hint={`Mínimo ${miles(prm.limiteMin)} · máximo permitido ${miles(prm.limiteMax)}. Es la opción I.`} error={intento || rcg.limite ? errorSuma : undefined}>
+          <Field label="Suma asegurada deseada" full={MODO_CLIENTE} hint={`Mínimo ${miles(prm.limiteMin)} · máximo permitido ${miles(prm.limiteMax)}. Es la opción I.`} error={intento || rcg.limite ? errorSuma : undefined}>
             <Input type="number" min={prm.limiteMin} max={prm.limiteMax} step="0.01" value={rcg.limite} onChange={(e) => cambiarSuma(e.target.value)} placeholder="Ej. 50000" />
+            <SliderSuma valor={rcg.limite} min={prm.limiteMin} max={prm.limiteMax} onChange={cambiarSuma} formato={miles} />
           </Field>
-          <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
-            <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
-          </Field>
+          {/* Vista cliente: la tasa queda en la media de la clase (se fija al elegirla en Riesgo) y no se muestra. */}
+          {!MODO_CLIENTE && (
+            <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
+              <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
+            </Field>
+          )}
         </div>
       </SectionCard>
 
@@ -213,9 +219,11 @@ function CotizacionPlanes() {
       {esRcg && (
         <SectionCard title="Tasa de la clase" description={`Clase: ${clase.etiqueta} · ${rcg.indole}`} Icon={Calculator}>
           <div className="grid sm:grid-cols-3 gap-4">
-            <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
-              <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
-            </Field>
+            {!MODO_CLIENTE && (
+              <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
+                <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
+              </Field>
+            )}
             <div className="sm:col-span-2 self-end text-[0.78rem] text-slate-500">
               La tasa se aplica a la suma de cada plan con la tarifa del RCG (prima mínima USD {importe(prm.primaMinimaDivisa)} proporcional).
             </div>
@@ -598,9 +606,11 @@ function DatosTarifaOficial({ oficial, intento }: { oficial: TarifaOficial; inte
         description="Con estos datos se aplica la tarifa oficial del RCG. El límite es la suma que escribas en la cobertura básica (opción I).">
         <div className="grid sm:grid-cols-2 gap-4">
           <CamposClaseRcg errorIndole={errores.find(esIndole)} />
-          <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={oficial.errores.find(esTasa)}>
-            <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
-          </Field>
+          {!MODO_CLIENTE && (
+            <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={oficial.errores.find(esTasa)}>
+              <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
+            </Field>
+          )}
           <Field label="Moneda" hint="Define la cobertura básica de Sis2000 que lleva la prima.">
             <Select value={rcg.moneda} onChange={(e) => setRcg({ moneda: e.target.value as MonedaRcg })}>
               {MONEDAS_RCG.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -622,9 +632,11 @@ function DatosTarifaOficial({ oficial, intento }: { oficial: TarifaOficial; inte
       <div className="grid sm:grid-cols-2 gap-4">
         <CamposClaseRc intento={intento} conActividad={k === 'e'} conIndole={false} />
         <CamposNominaRc />
-        <Field label="Tasa básica (%)" hint="Se propone la tasa media del rango al elegir la clase o la actividad.">
-          <Input type="number" step="any" value={x.tasa} onChange={(e) => setRcProducto(k, { tasa: e.target.value })} />
-        </Field>
+        {!MODO_CLIENTE && (
+          <Field label="Tasa básica (%)" hint="Se propone la tasa media del rango al elegir la clase o la actividad.">
+            <Input type="number" step="any" value={x.tasa} onChange={(e) => setRcProducto(k, { tasa: e.target.value })} />
+          </Field>
+        )}
         {rc.moneda !== 'VES' && (
           <Field label="Opción">
             <Select value={x.opcion} onChange={(e) => setRcProducto(k, { opcion: e.target.value as IdOpcion })}>
@@ -676,6 +688,9 @@ function adicionales(k: K, p: ParametrosRc): { nombre: string; porEmpleado: stri
       ];
 }
 
+/** RCP/RCE no tienen suma mínima en Parámetros: el slider arranca en 1.000 (o un décimo del tope si es menor). */
+const minSumaRc = (max: number) => Math.min(1000, max / 10);
+
 function CotizacionRc() {
   const prmRc = useParametrosStore((s) => s.rc);
   const vistaTecnica = useParametrosStore((s) => s.vistaTecnica);
@@ -713,6 +728,7 @@ function CotizacionRc() {
               hint={`Máximo permitido ${importe(maxSuma)} (tope individual de la opción I en Parámetros).`}>
               <Input type="number" min={0} max={maxSuma} step="0.01" value={rc.sumaDeseada} placeholder="Según nómina"
                 onChange={(e) => cambiarSuma(e.target.value)} />
+              <SliderSuma valor={rc.sumaDeseada} min={minSumaRc(maxSuma)} max={maxSuma} onChange={cambiarSuma} formato={importe} />
             </Field>
             <p className="text-[0.72rem] text-slate-500 self-center">
               Opción I = la suma elegida{f1 !== 1 ? ` × ${f1}` : ''} · II = suma × {f2} · III = suma × {f3}, cada una con su tope individual
@@ -727,16 +743,19 @@ function CotizacionRc() {
         const x = rc[r.k];
         return (
           <SectionCard key={r.k} title={NOMBRES[r.k]} Icon={r.k === 'p' ? ShieldCheck : Calculator}
-            description={r.riesgo ? `${r.k === 'p' ? 'Clase' : 'Actividad'}: ${r.riesgo[0]} · rango ${porcentaje(r.riesgo[1])} – ${porcentaje(r.riesgo[2])}` : 'Clasificación pendiente'}>
+            description={r.riesgo ? `${r.k === 'p' ? 'Clase' : 'Actividad'}: ${r.riesgo[0]}${MODO_CLIENTE ? '' : ` · rango ${porcentaje(r.riesgo[1])} – ${porcentaje(r.riesgo[2])}`}` : 'Clasificación pendiente'}>
             <div className="space-y-4">
-              <div className="grid sm:grid-cols-2 gap-4">
-                <Field label="Tasa básica (%)">
-                  <Input type="number" step="any" value={x.tasa} onChange={(e) => setRcProducto(r.k, { tasa: e.target.value })} />
-                </Field>
-                <Field label="Ajuste: descuento (−) o recargo (+) %" hint="Relativo, máximo ±10 %. El descuento requiere validación técnica.">
-                  <Input type="number" min={-10} max={10} step="0.01" value={x.ajuste} onChange={(e) => setRcProducto(r.k, { ajuste: e.target.value })} />
-                </Field>
-              </div>
+              {/* Vista cliente: sin tasa ni ajuste (el descuento requiere validación técnica). */}
+              {!MODO_CLIENTE && (
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <Field label="Tasa básica (%)">
+                    <Input type="number" step="any" value={x.tasa} onChange={(e) => setRcProducto(r.k, { tasa: e.target.value })} />
+                  </Field>
+                  <Field label="Ajuste: descuento (−) o recargo (+) %" hint="Relativo, máximo ±10 %. El descuento requiere validación técnica.">
+                    <Input type="number" min={-10} max={10} step="0.01" value={x.ajuste} onChange={(e) => setRcProducto(r.k, { ajuste: e.target.value })} />
+                  </Field>
+                </div>
+              )}
 
               <p className="text-[0.72rem] text-slate-500">
                 <strong>Coberturas básicas:</strong> {[...COBERTURAS_BASICAS, r.k === 'p' ? 'Gastos de entierro' : 'Secuelas o deformidades permanentes'].join(' · ')}.
@@ -760,12 +779,14 @@ function CotizacionRc() {
                         const medica = /m[eé]dic/i.test(o[0]);
                         return (
                           <div key={o[0]} className="space-y-2">
-                            <Casilla checked={op.seleccionada} onChange={(v) => cambiar({ seleccionada: v })} detalle={`Tasa ${o[1]} % – ${o[2]} %`}>{o[0]}</Casilla>
+                            <Casilla checked={op.seleccionada} onChange={(v) => cambiar({ seleccionada: v })} detalle={MODO_CLIENTE ? undefined : `Tasa ${o[1]} % – ${o[2]} %`}>{o[0]}</Casilla>
                             {op.seleccionada && (
                               <div className="grid grid-cols-2 gap-2 pl-2">
-                                <Field label="Tasa (%)">
-                                  <Input type="number" step="any" value={r.k === 'e' ? String(o[1]) : op.tasa} readOnly={r.k === 'e'} onChange={(e) => cambiar({ tasa: e.target.value })} />
-                                </Field>
+                                {!MODO_CLIENTE && (
+                                  <Field label="Tasa (%)">
+                                    <Input type="number" step="any" value={r.k === 'e' ? String(o[1]) : op.tasa} readOnly={r.k === 'e'} onChange={(e) => cambiar({ tasa: e.target.value })} />
+                                  </Field>
+                                )}
                                 {!restringida && (medica ? (
                                   <Field label="Límite por trabajador">
                                     <Select value={op.limite} onChange={(e) => cambiar({ limite: e.target.value })}>

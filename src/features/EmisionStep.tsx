@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Mail, Printer, RotateCcw, Send, ShieldCheck, Stamp, User } from 'lucide-react';
 import { documentosRcg, documentosRcgSis2000, urlDocumento, type DocumentoRcg } from '../pdf/condicionadosRcg';
 import { useParametrosStore } from '../store/parametrosStore';
@@ -29,6 +29,7 @@ import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
 import { emitirCoberturas } from '../api/patrimonial';
 import type { ResultadoEmision } from '../tarifas/planes-rcg';
 import { correoValido, errorTamanoPdf, tamanoLegible } from '../correo/correoCotizacion';
+import { EMISOR_CLIENTE, MODO_CLIENTE } from '../config/modoCliente';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -48,14 +49,24 @@ const SOLO_PASTORA = import.meta.env.VITE_SOLO_PASTORA === '1';
 type EstadoEnvio = 'editando' | 'confirmando' | 'enviando' | 'enviado' | 'error';
 
 /** Envío de la cotización por correo: mismo PDF que «Descargar», al correo del tomador (editable) con confirmación. */
-function EnviarCorreoCotizacion({ correoInicial, nombre, numero, vigenciaDias, generar, onCerrar }: {
+function EnviarCorreoCotizacion({ correoInicial, nombre, numero, vigenciaDias, generar, onCerrar, auto = false }: {
   correoInicial: string; nombre: string; numero: string; vigenciaDias: number;
   generar: () => Promise<PdfCotizacion>; onCerrar: () => void;
+  /** Vista cliente: se envía sola al correo del tomador al llegar al final, sin confirmar. */
+  auto?: boolean;
 }) {
   const [correo, setCorreo] = useState(correoInicial.trim());
   const [estado, setEstado] = useState<EstadoEnvio>('editando');
   const [mensaje, setMensaje] = useState('');
   const valido = correoValido(correo);
+  // StrictMode monta el efecto dos veces en desarrollo: la ref evita el doble envío.
+  const autoEnviado = useRef(false);
+  useEffect(() => {
+    if (!auto || autoEnviado.current || !correoValido(correoInicial.trim())) return;
+    autoEnviado.current = true;
+    void enviar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auto]);
 
   const enviar = async () => {
     setEstado('enviando');
@@ -81,8 +92,10 @@ function EnviarCorreoCotizacion({ correoInicial, nombre, numero, vigenciaDias, g
 
   const ocupado = estado === 'enviando';
   return (
-    <SectionCard title="Enviar cotización por correo" Icon={Mail} statusLabel={estado === 'enviado' ? 'Enviada' : undefined} statusTone="success"
-      description="Se envía el mismo PDF de «Descargar cotización PDF» como adjunto.">
+    <SectionCard title={auto ? 'Tu cotización por correo' : 'Enviar cotización por correo'} Icon={Mail} statusLabel={estado === 'enviado' ? 'Enviada' : undefined} statusTone="success"
+      description={auto
+        ? 'Te enviamos la cotización en PDF al correo que indicaste. Si no te llega, revisa el correo y envíala de nuevo.'
+        : 'Se envía el mismo PDF de «Descargar cotización PDF» como adjunto.'}>
       <div className="grid sm:grid-cols-2 gap-4 items-start">
         <Field label="Correo del destinatario" error={correo && !valido ? 'Introduce un correo electrónico válido.' : undefined}
           hint="Precargado con el correo del tomador / asegurado; puedes cambiarlo.">
@@ -165,7 +178,7 @@ export function EmisionStep() {
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: s.rcg.moneda,
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
         ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
-        sucursal: c.sucursal, elaboradoPor: c.emisor, alternativas: cotRcg.alternativas, coberturas: cotRcg.coberturas,
+        sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, elaboradoPor: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor, alternativas: cotRcg.alternativas, coberturas: cotRcg.coberturas,
         deducible: cotRcg.deducible, notaIgtf: cotRcg.notaIgtf, condiciones: cotRcg.condiciones, vigenciaDias, mesaTecnica,
       }, assets);
       return {
@@ -190,7 +203,7 @@ export function EmisionStep() {
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: 'USD',
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
         ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
-        sucursal: c.sucursal, elaboradoPor: c.emisor,
+        sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, elaboradoPor: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
         alternativas: [cobCot
           ? { opcion: 'I', limite: cobCot.cot.suma_asegurada, prima: cobCot.cot.prima_total, primaMinimaAplicada: false }
           : { opcion: 'I', limite: plan.suma, prima: plan.prima, primaMinimaAplicada: false }],
@@ -220,7 +233,7 @@ export function EmisionStep() {
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda,
         indole: '', actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
         ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
-        sucursal: c.sucursal, elaboradoPor: c.emisor,
+        sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, elaboradoPor: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
         alternativas: [{ opcion: 'I', limite: cot.suma_asegurada, prima: cot.prima_total, primaMinimaAplicada: false }],
         coberturas: cot.coberturas.map((x) => ({ nombre: vistaTecnica ? `${x.nombre} (prima ${importe(x.prima)})` : x.nombre, montos: [x.suma] })),
         deducible: '', notaIgtf: !/^bs/i.test(moneda), condiciones: [], vigenciaDias, mesaTecnica,
@@ -260,10 +273,10 @@ export function EmisionStep() {
           <Dato label="RIF">{rifCompleto(c)}</Dato>
           <Dato label="Correo">{c.correo}</Dato>
           <Dato label="Ubicación del riesgo">{c.ubicacion}</Dato>
-          <Dato label="Intermediario">{c.intermediario}</Dato>
+          {!MODO_CLIENTE && <Dato label="Intermediario">{c.intermediario}</Dato>}
           <Dato label="Fecha">{new Date().toLocaleDateString('es-VE')}</Dato>
-          <Dato label="Sucursal">{c.sucursal}</Dato>
-          <Dato label="Elaborada por">{c.emisor}</Dato>
+          {!MODO_CLIENTE && <Dato label="Sucursal">{c.sucursal}</Dato>}
+          {!MODO_CLIENTE && <Dato label="Elaborada por">{c.emisor}</Dato>}
           {planes && <Dato label="Teléfono">{c.telefono}</Dato>}
           {k.esContrato && <Dato label="Contrato">{[k.numero, s.producto !== 'rc' ? k.coasegurado : k.vigencia, k.objeto].filter(Boolean).join(' · ')}</Dato>}
         </div>
@@ -278,17 +291,19 @@ export function EmisionStep() {
       {rcg && <CondicionadosRcg coberturas={cotRcg.coberturas.map((x) => x.nombre)} moneda={s.rcg.moneda} />}
       {(planes || combo) && docsSis2000.length > 0 && <CondicionadosRcg docs={docsSis2000} />}
 
-      {planes ? <EmitirPlan /> : combo ? <EmitirCombo numero={numero} /> : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />}
+      {/* Vista cliente: solo cotiza; la emisión la hace el canal (nunca se emite sin pago). */}
+      {!MODO_CLIENTE && (planes ? <EmitirPlan /> : combo ? <EmitirCombo numero={numero} /> : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />)}
 
       <p className="text-[0.72rem] text-slate-500">
         Cotización válida por {rcg || combo ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
         {(rcg || planes || combo) && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
       </p>
 
-      {correoAbierto && (rcg || planes || combo) && (
+      {/* Admin: se abre con el botón y se confirma. Cliente: se envía solo al llegar aquí. */}
+      {(correoAbierto || MODO_CLIENTE) && (rcg || planes || combo) && (
         // vigenciaDias: la misma validez que imprime el PDF adjunto.
         <EnviarCorreoCotizacion correoInicial={c.correo} nombre={c.asegurado} numero={numero} vigenciaDias={vigenciaDias}
-          generar={generarPdf} onCerrar={() => setCorreoAbierto(false)} />
+          generar={generarPdf} onCerrar={() => setCorreoAbierto(false)} auto={MODO_CLIENTE} />
       )}
 
       <StepActions continueLabel="" extra={(
@@ -299,7 +314,7 @@ export function EmisionStep() {
                 {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
                 {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
               </Button>
-              {!SOLO_PASTORA && (
+              {!SOLO_PASTORA && !MODO_CLIENTE && (
                 <Button variant="secondary" size="lg" onClick={() => setCorreoAbierto(true)} disabled={correoAbierto}>
                   <Mail size={15} />
                   Enviar cotización por correo
@@ -423,7 +438,7 @@ function EmitirPlan() {
     if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
   };
 
-  if (emision) return <PolizaEmitida emision={emision} />;
+  if (emision) return <PolizaEmitida emision={emision} prima={plan ? `USD ${importe(cobCot ? cobCot.cot.prima_total : plan.prima)}` : undefined} />;
 
   return (
     <SectionCard title="Emitir en Sis2000 QA" description={cobCot ? 'Cobertura por cobertura (nest-api riesgos-generales/emision).' : 'Partner patrimonial de nest-api (el mismo de Emisión).'} Icon={habilitada ? FileCheck2 : Lock}
@@ -454,11 +469,13 @@ function EmitirPlan() {
   );
 }
 
-function PolizaEmitida({ emision }: { emision: ResultadoEmision }) {
+/** `prima`: prima total ya formateada con su moneda (la misma que se mandó a emitir). */
+function PolizaEmitida({ emision, prima }: { emision: ResultadoEmision; prima?: string }) {
   return (
     <SectionCard title="Póliza emitida en Sis2000 QA" Icon={FileCheck2} statusLabel="Emitida" statusTone="success">
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-4 gap-4">
         <Dato label="N.º de póliza">{emision.cnpoliza}</Dato>
+        <Dato label="Prima total">{prima}</Dato>
         <Dato label="N.º de recibo">{emision.cnrecibo}</Dato>
         <Dato label="Documento">
           {emision.urlpoliza
@@ -503,7 +520,7 @@ function EmitirCombo({ numero }: { numero: string }) {
   const unico = planesRamo.length === 1 ? planesRamo[0].cplan : '';
   useEffect(() => { setCplan(unico); }, [cramo, unico]);
 
-  if (emision) return <PolizaEmitida emision={emision} />;
+  if (emision) return <PolizaEmitida emision={emision} prima={r ? `${r.moneda} ${importe(r.cot.prima_total)}` : undefined} />;
   if (!r) return null;
 
   const emitirAhora = async () => {
@@ -739,7 +756,7 @@ function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerid
   const preferido = planesRamo.find((p) => p.cplan === sugerido)?.cplan ?? (planesRamo.length === 1 ? planesRamo[0].cplan : '');
   useEffect(() => { setCplan(preferido); }, [cramo, preferido]);
 
-  if (resultado) return <PolizaEmitida emision={resultado} />;
+  if (resultado) return <PolizaEmitida emision={resultado} prima={emision ? `${moneda} ${importe(emision.primaTotal)}` : undefined} />;
 
   const faltan = [
     ...(catalogo?.error ? [`No se pudieron verificar las coberturas del ramo en Sis2000: ${catalogo.error}`] : []),

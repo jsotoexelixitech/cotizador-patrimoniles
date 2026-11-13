@@ -7,4 +7,6 @@ interface ImportMetaEnv {
   readonly VITE_RCG_PLANES_CPRODUCTOR?: string;
   /** '1' habilita «Emitir en Sis2000 QA» de RCG, RCP y RCE con la prima del cotizador (nest-api modo cotizador). */
   readonly VITE_RC_EMITIR?: string;
+  /** '1' = vista cliente (link al cliente): lo define vite.config.ts con COTIZADOR_CLIENTE=1. */
+  readonly VITE_MODO_CLIENTE?: string;
 }
