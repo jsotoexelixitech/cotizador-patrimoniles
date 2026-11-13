@@ -292,6 +292,41 @@ export function EmisionStep() {
     }
   };
 
+  /**
+   * RCP / RCE / ambas: el mismo PDF oficial del RCG (formato genérico, sin Solicitud RCG) con el nombre del producto,
+   * los límites de cada póliza y la prima total, como el PDF del Google Sheet. No modifica el PDF del RCG.
+   */
+  const generarRc = async (): Promise<PdfCotizacion> => {
+    const res = cotRc.resultados;
+    if (!res.length || cotRc.errores.length) throw new Error('La cotización tiene errores: vuelve al paso de cotización.');
+    const nombre = res.map((r) => NOMBRES[r.k]).join(' y ');
+    const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
+    const assets = await cargarAssetsRcg();
+    const coberturas = res.flatMap((r) => {
+      const p = res.length > 1 ? `${r.k === 'p' ? 'RCP' : 'RCE'} · ` : '';
+      return [
+        { nombre: `${p}Límite por trabajador`, montos: [r.limites[0]] },
+        { nombre: `${p}Dos o más trabajadores`, montos: [r.limites[1]] },
+        { nombre: `${p}Por evento / año póliza`, montos: [r.limites[2]] },
+        ...r.lineas.filter((l) => !/^cobertura b[aá]sica$/i.test(l.nombre.trim())).map((l) => ({ nombre: `${p}${l.nombre}`, montos: [r.limites[0]] })),
+      ];
+    });
+    const bytes = await generarPdfRcg({
+      numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: cotRc.simbolo,
+      indole: s.rc.indole, actividadEspecifica: res.map((r) => r.riesgo?.[0]).filter(Boolean).join(' · '), correo: c.correo, intermediario: c.intermediario,
+      ubicacion: c.ubicacion, esContrato: k.esContrato, numeroContrato: k.numero, objetoObra: k.objeto, coasegurado: k.coasegurado,
+      sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, elaboradoPor: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
+      alternativas: [{ opcion: (res[0].opcion ?? 'I') as 'I' | 'II' | 'III', limite: Math.max(...res.map((r) => r.limites[2] ?? 0)), prima: cotRc.total, primaMinimaAplicada: false }],
+      coberturas, deducible: '', notaIgtf: !/^bs|ves/i.test(cotRc.simbolo), condiciones: [], vigenciaDias: 15, mesaTecnica,
+      plan: { ramo: nombre, nombre, cplan: res.map((r) => (r.k === 'p' ? 'RCP' : 'RCE')).join('+'), esRcg: false, combo: true },
+    }, assets);
+    return {
+      bytes, nombre: `Cotizacion_LaMundial_${res.map((r) => (r.k === 'p' ? 'RCP' : 'RCE')).join('_')}_${c.asegurado.trim().replace(/\s+/g, '_') || 'RC'}.pdf`,
+      detalle: `${numero} · ${nombre}.`,
+      producto: nombre,
+    };
+  };
+
   const descargarCon = async (generar: () => Promise<PdfCotizacion>) => {
     setGenerando(true);
     try {
@@ -308,7 +343,9 @@ export function EmisionStep() {
   const descargarRcg = () => descargarCon(generarRcg);
   const descargarPlan = () => descargarCon(generarPlan);
   const descargarCombo = () => descargarCon(generarCombo);
-  const generarPdf = rcg ? generarRcg : combo ? generarCombo : generarPlan;
+  const descargarRc = () => descargarCon(generarRc);
+  const esRc = s.producto === 'rc';
+  const generarPdf = rcg ? generarRcg : combo ? generarCombo : esRc ? generarRc : generarPlan;
 
   return (
     <div className="space-y-5">
@@ -362,7 +399,7 @@ export function EmisionStep() {
       </p>
 
       {/* Admin: se abre con el botón y se confirma. Cliente: se envía solo al llegar aquí. */}
-      {(correoAbierto || MODO_CLIENTE) && (rcg || planes || combo) && !guardando && (
+      {(correoAbierto || MODO_CLIENTE) && (rcg || planes || combo || esRc) && !guardando && (
         // vigenciaDias: la misma validez que imprime el PDF adjunto.
         <EnviarCorreoCotizacion key={numero} correoInicial={c.correo} nombre={c.asegurado} numero={numero} vigenciaDias={vigenciaDias}
           generar={generarPdf} onCerrar={() => setCorreoAbierto(false)} auto={MODO_CLIENTE} />
@@ -370,9 +407,9 @@ export function EmisionStep() {
 
       <StepActions continueLabel="" extra={(
         <>
-          {rcg || planes || combo ? (
+          {rcg || planes || combo || esRc ? (
             <>
-              <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : combo ? descargarCombo : descargarPlan} disabled={generando}>
+              <Button variant="primary" size="lg" onClick={rcg ? descargarRcg : combo ? descargarCombo : esRc ? descargarRc : descargarPlan} disabled={generando}>
                 {generando ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
                 {generando ? 'Generando PDF…' : 'Descargar cotización PDF'}
               </Button>
