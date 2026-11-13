@@ -226,7 +226,7 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
       ...(d.esContrato ? ['sep' as const,
         [{ t: 'Número de Contrato:', b: true }, { t: d.numeroContrato }],
         [{ t: 'Objeto de la Obra:', b: true }, { t: d.objetoObra }],
-        [{ t: 'Nombre del coasegurado:', b: true }, { t: d.coasegurado }]] : []),
+        [{ t: 'Razón social del coasegurado:', b: true }, { t: d.coasegurado }]] : []),
     ];
     const pad = 10;
     const interior = CW - pad * 2 - 4;

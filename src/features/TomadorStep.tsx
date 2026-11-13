@@ -125,7 +125,7 @@ export function TomadorStep() {
       <ToggleSwitch
         checked={k.esContrato}
         onChange={(v) => setContrato(v ? { esContrato: true } : { esContrato: false, numero: '', objeto: '', coasegurado: '' })}
-        label="¿La cotización está asociada a un contrato?"
+        label="¿La cotización está asociada a una fianza?"
         description={rcg ? 'Con contrato cambian las coberturas (7) y se habilitan condiciones especiales.' : 'Indica número, vigencia y objeto de la obra.'}
       />
 
@@ -136,7 +136,7 @@ export function TomadorStep() {
               <Input value={k.numero} onChange={(e) => setContrato({ numero: e.target.value })} />
             </Field>
             {rcg ? (
-              <Field label="Nombre del coasegurado" error={errores.coasegurado}>
+              <Field label="Razón social del coasegurado" error={errores.coasegurado}>
                 <Input value={k.coasegurado} maxLength={180} onChange={(e) => setContrato({ coasegurado: e.target.value })} />
               </Field>
             ) : (
