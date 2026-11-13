@@ -303,7 +303,7 @@ export function EmisionStep() {
     const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
     const assets = await cargarAssetsRcg();
     const coberturas = res.flatMap((r) => {
-      const p = res.length > 1 ? `${r.k === 'p' ? 'RCP' : 'RCE'} · ` : '';
+      const p = res.length > 1 ? `${r.k === 'p' ? 'RCP' : 'RCE'} - ` : '';
       return [
         { nombre: `${p}Límite por trabajador`, montos: [r.limites[0]] },
         { nombre: `${p}Dos o más trabajadores`, montos: [r.limites[1]] },
