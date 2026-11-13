@@ -9,7 +9,16 @@ const porUrl = (() => {
   }
 })();
 
-export const MODO_CLIENTE = import.meta.env.VITE_MODO_CLIENTE === '1' || porUrl;
+/** Entrando por el túnel (link que se le da al cliente) siempre es vista cliente, aunque quiten ?vista=cliente. */
+const porHost = (() => {
+  try {
+    return /\.trycloudflare\.com$/i.test(window.location.hostname);
+  } catch {
+    return false;
+  }
+})();
+
+export const MODO_CLIENTE = import.meta.env.VITE_MODO_CLIENTE === '1' || porUrl || porHost;
 
 /** Sucursal y responsable que imprime el PDF cuando la cotización la hace el propio cliente. */
 export const EMISOR_CLIENTE = { sucursal: 'Caracas', emisor: 'Cotización en línea' } as const;

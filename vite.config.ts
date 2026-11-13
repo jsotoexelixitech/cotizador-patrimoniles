@@ -34,7 +34,9 @@ export default defineConfig(({ mode }) => {
           bypass: (req) => {
             const url = req.url ?? '';
             if (publico && !rutaPastora(url)) return false;
-            if (cliente && !rutaCliente(req)) return false;
+            // Mismo puerto para admin y cliente: lo que entra por el túnel se trata siempre como cliente.
+            const externo = /\.trycloudflare\.com$/i.test(String(req.headers.host ?? '').split(':')[0]);
+            if ((cliente || externo) && !rutaCliente(req)) return false;
             return !esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(url) ? false : undefined;
           },
         },
@@ -49,7 +51,7 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_MODO_CLIENTE': JSON.stringify(cliente ? '1' : ''),
     },
     plugins: [react(), tailwindcss()],
-    server: { host: true, port: 5180, proxy, ...(publico || cliente ? { allowedHosts: ['.trycloudflare.com'] } : {}) },
+    server: { host: true, port: 5180, proxy, allowedHosts: ['.trycloudflare.com'] },
     preview: { proxy },
   };
 });
