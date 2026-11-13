@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Calculator, Check, ListChecks, Loader2, RefreshCw, ShieldCheck, Stamp } from 'lucide-react';
+import { Calculator, Check, ListChecks, Loader2, RefreshCw, Scale, ShieldCheck, Stamp } from 'lucide-react';
 import { SectionCard } from '../components/ui/SectionCard';
 import { Field, Input, Select } from '../components/ui/FormField';
 import { StepActions } from '../components/ui/StepActions';
@@ -7,9 +7,11 @@ import { Aviso } from '../components/ui/Aviso';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { cn } from '../lib/utils';
-import { importe, porcentaje } from '../tarifas/comun';
-import { MONEDAS_RCG, type MonedaRcg } from '../tarifas/rcg';
-import { COBERTURAS_BASICAS, NOMBRES, OPCIONES, opcionalesDe, type IdOpcion, type ParametrosRc } from '../tarifas/rcp-rce';
+import { importe, numeroONulo, porcentaje } from '../tarifas/comun';
+import { descripcionOpcionesRcg, errorSumaRcg, MONEDAS_RCG, type MonedaRcg } from '../tarifas/rcg';
+import {
+  COBERTURAS_BASICAS, NOMBRES, OPCIONES, opcionalesDe, sumaDeseadaMaxima, validarSumaDeseada, type IdOpcion, type ParametrosRc,
+} from '../tarifas/rcp-rce';
 import { useParametrosStore } from '../store/parametrosStore';
 import { useCotizacionPlanesRcg, useCotizacionRc, useCotizacionRcg, useCotizacionStore, useMesaTecnica, type K } from '../store/cotizacionStore';
 import { usePlanesStore } from '../store/planesStore';
@@ -90,18 +92,29 @@ function CotizacionRcg() {
   const m = (n: number) => `${rcg.moneda} ${importe(n)}`;
   const miles = (n: number) => n.toLocaleString('es-VE');
   const opcionValida = cot.alternativas.some((a) => a.opcion === rcg.opcion);
+  const errorSuma = errorSumaRcg(rcg.limite, prm) ?? cot.errores.limite;
+  // No se deja escribir una suma mayor a la máxima de Parámetros: se recorta con aviso.
+  const cambiarSuma = (valor: string) => {
+    const n = Number(valor);
+    if (valor.trim() !== '' && Number.isFinite(n) && n > prm.limiteMax) {
+      setRcg({ limite: String(prm.limiteMax) });
+      toast.warning('Suma ajustada al máximo', `La suma asegurada no puede superar ${miles(prm.limiteMax)}; se dejó en el máximo permitido.`);
+      return;
+    }
+    setRcg({ limite: valor });
+  };
 
   return (
     <div className="space-y-5">
-      <SectionCard title="Límite y tasa" description={`Clase: ${clase.etiqueta}`} Icon={Calculator}>
+      <SectionCard title="Suma asegurada y tasa" description={`Clase: ${clase.etiqueta}`} Icon={Calculator}>
         <div className="grid sm:grid-cols-3 gap-4">
           <Field label="Moneda">
             <Select value={rcg.moneda} onChange={(e) => setRcg({ moneda: e.target.value as MonedaRcg })}>
               {MONEDAS_RCG.map((x) => <option key={x} value={x}>{x}</option>)}
             </Select>
           </Field>
-          <Field label="Límite de responsabilidad" hint={`Entre ${miles(prm.limiteMin)} y ${miles(prm.limiteMax)} (opción I).`} error={intento || rcg.limite ? cot.errores.limite : undefined}>
-            <Input type="number" min={prm.limiteMin} max={prm.limiteMax} step="0.01" value={rcg.limite} onChange={(e) => setRcg({ limite: e.target.value })} placeholder="Ej. 50000" />
+          <Field label="Suma asegurada deseada" hint={`Mínimo ${miles(prm.limiteMin)} · máximo permitido ${miles(prm.limiteMax)}. Es la opción I.`} error={intento || rcg.limite ? errorSuma : undefined}>
+            <Input type="number" min={prm.limiteMin} max={prm.limiteMax} step="0.01" value={rcg.limite} onChange={(e) => cambiarSuma(e.target.value)} placeholder="Ej. 50000" />
           </Field>
           <Field label="Tasa básica (%)" hint={`Rango: ${clase.min.toFixed(2)} % – ${clase.max.toFixed(2)} %`} error={cot.errores.tasa}>
             <Input type="number" min={clase.min} max={clase.max} step="0.01" value={rcg.tasa} onChange={(e) => setRcg({ tasa: e.target.value })} />
@@ -109,18 +122,26 @@ function CotizacionRcg() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Elige la opción" description={`Opciones I, II y III: límite ×${prm.factoresOpciones.join(', ×')} (tope ${miles(prm.limiteMax)}).`} Icon={ShieldCheck}>
+      <SectionCard title="Elige la opción" description={descripcionOpcionesRcg(prm)} Icon={ShieldCheck}>
         {cot.alternativas.length === 0 ? (
-          <p className="text-sm text-slate-500">Ingresa un límite y una tasa válidos para ver las primas.</p>
+          <p className="text-sm text-slate-500">Ingresa una suma asegurada y una tasa válidas para ver las primas.</p>
         ) : (
-          <div className="grid sm:grid-cols-3 gap-3">
-            {cot.alternativas.map((a) => (
-              <TarjetaOpcion key={a.opcion} titulo={`Opción ${a.opcion}`} activa={rcg.opcion === a.opcion} onClick={() => setRcg({ opcion: a.opcion })}
-                prima={m(a.prima)} etiqueta={a.primaMinimaAplicada ? 'Prima mínima aplicada' : 'Prima neta'}>
-                <p>Límite: <strong className="text-slate-700">{m(a.limite)}</strong></p>
-              </TarjetaOpcion>
-            ))}
-          </div>
+          <>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {cot.alternativas.map((a, i) => (
+                <TarjetaOpcion key={a.opcion} titulo={`Opción ${a.opcion}`} activa={rcg.opcion === a.opcion} onClick={() => setRcg({ opcion: a.opcion })}
+                  prima={m(a.prima)} etiqueta={a.primaMinimaAplicada ? 'Prima mínima aplicada' : 'Prima neta'}>
+                  <p>Suma asegurada: <strong className="text-slate-700">{m(a.limite)}</strong></p>
+                  <p>{i === 0 ? 'La suma que elegiste' : `Suma × ${prm.factoresOpciones[i] ?? 1}`}{i > 0 && a.limite >= prm.limiteMax ? ' · tope máximo aplicado' : ''}</p>
+                </TarjetaOpcion>
+              ))}
+            </div>
+            {cot.alternativas.length < 3 && (
+              <p className="text-[0.72rem] text-slate-500 mt-2">
+                Solo {cot.alternativas.length === 1 ? 'aparece 1 opción' : `aparecen ${cot.alternativas.length} opciones`}: al multiplicar se llega al máximo permitido ({miles(prm.limiteMax)}) y la opción siguiente repetiría la misma suma.
+              </p>
+            )}
+          </>
         )}
       </SectionCard>
 
@@ -146,7 +167,7 @@ function CotizacionRcg() {
 
       <StepActions continueLabel="Ver resumen" onContinue={() => {
         setIntento(true);
-        const e = cot.errores.limite ?? cot.errores.tasa;
+        const e = errorSuma ?? cot.errores.tasa;
         if (e) { toast.error('Revisa la cotización', e); return false; }
         if (!opcionValida) setRcg({ opcion: 'I' });
         return true;
@@ -665,9 +686,43 @@ function CotizacionRc() {
   const ves = rc.moneda === 'VES';
   const m = (n: number) => `${cot.simbolo} ${importe(n)}`;
   const sinErrores = cot.errores.length === 0;
+  const setRc = useCotizacionStore((s) => s.setRc);
+  const maxSuma = sumaDeseadaMaxima(prmRc);
+  const errorSuma = !ves && rc.sumaDeseada.trim() !== '' ? validarSumaDeseada(numeroONulo(rc.sumaDeseada), prmRc) : null;
+  // No se deja escribir una suma mayor a la máxima de Parámetros: se recorta con aviso.
+  const cambiarSuma = (valor: string) => {
+    const n = Number(valor);
+    if (valor.trim() !== '' && Number.isFinite(n) && n > maxSuma) {
+      setRc({ sumaDeseada: String(maxSuma) });
+      toast.warning('Suma ajustada al máximo', `La suma por trabajador no puede superar ${importe(maxSuma)}; se dejó en el máximo permitido.`);
+      return;
+    }
+    setRc({ sumaDeseada: valor });
+  };
+  const [f1 = 1, f2 = 2, f3 = 3] = prmRc.factoresSumaDeseada;
 
   return (
     <div className="space-y-5">
+      <SectionCard title="Suma asegurada deseada" Icon={Scale}
+        description={ves
+          ? 'En bolívares el límite es el legal (salarios anuales × trabajadores) y la prima es un % de ese límite; no se elige una suma libre.'
+          : 'Opcional. Déjala vacía para usar los límites que salen de la nómina (como el Sheet). La prima no cambia: depende de la nómina y la tasa.'}>
+        {!ves && (
+          <div className="grid sm:grid-cols-2 gap-4">
+            <Field label="Suma por trabajador" error={errorSuma ?? undefined}
+              hint={`Máximo permitido ${importe(maxSuma)} (tope individual de la opción I en Parámetros).`}>
+              <Input type="number" min={0} max={maxSuma} step="0.01" value={rc.sumaDeseada} placeholder="Según nómina"
+                onChange={(e) => cambiarSuma(e.target.value)} />
+            </Field>
+            <p className="text-[0.72rem] text-slate-500 self-center">
+              Opción I = la suma elegida{f1 !== 1 ? ` × ${f1}` : ''} · II = suma × {f2} · III = suma × {f3}, cada una con su tope individual
+              ({prmRc.opcionesRcp.map((o) => importe(o.topeIndividual)).join(' / ')}). Dos o más / evento = suma × {prmRc.multiplicadorColectivo} con su tope colectivo.
+              La opción que no supere a la anterior no se muestra.
+            </p>
+          </div>
+        )}
+      </SectionCard>
+
       {cot.resultados.map((r) => {
         const x = rc[r.k];
         return (

@@ -48,7 +48,10 @@ export interface CotizacionState {
   tecnicoCombo: Record<number, Record<string, PrimaTecnica>>;
   rc: {
     modo: Modo; moneda: MonedaRc; tasaBcv: string; base: BaseNomina; monto: string; empleados: string;
-    claseSel: string; claseRelacionada: string; actividad: string; indole: string; p: ProductoForm; e: ProductoForm;
+    claseSel: string; claseRelacionada: string; actividad: string; indole: string;
+    /** USD/EUR: suma asegurada deseada por trabajador ('' = límites por nómina, como el Sheet). */
+    sumaDeseada: string;
+    p: ProductoForm; e: ProductoForm;
   };
   setProducto: (p: Producto) => void;
   setComun: (c: Partial<CotizacionState['comun']>) => void;
@@ -85,7 +88,7 @@ const inicial = () => ({
   tecnicoCombo: {} as Record<number, Record<string, PrimaTecnica>>,
   rc: {
     modo: 'both' as Modo, moneda: 'USD' as MonedaRc, tasaBcv: '', base: 'employee' as BaseNomina, monto: '', empleados: '',
-    claseSel: '', claseRelacionada: '', actividad: '', indole: '', p: productoInicial('p'), e: productoInicial('e'),
+    claseSel: '', claseRelacionada: '', actividad: '', indole: '', sumaDeseada: '', p: productoInicial('p'), e: productoInicial('e'),
   },
 });
 
@@ -139,7 +142,7 @@ export function solicitudRc(s: Pick<CotizacionState, 'comun' | 'contrato' | 'rc'
     asegurado: c.asegurado, rif: rifCompleto(c), correo: c.correo, direccion: c.ubicacion, sucursal: c.sucursal,
     emisor: c.emisor, correoEmisor: c.correoEmisor, intermediario: c.intermediario,
     esContrato: k.esContrato, numeroContrato: k.numero, vigenciaContrato: k.vigencia, objetoContrato: k.objeto,
-    p: aEntrada(rc.p), e: aEntrada(rc.e),
+    sumaDeseada: numeroONulo(rc.sumaDeseada ?? ''), p: aEntrada(rc.p), e: aEntrada(rc.e),
   };
 }
 

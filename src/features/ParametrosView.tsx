@@ -155,8 +155,8 @@ function ParametrosRcgView() {
     <div className="space-y-5">
       <SectionCard title="Límites y primas mínimas" description="Rango del límite inicial, multiplicadores de las opciones y prima mínima." Icon={Calculator}>
         <div className="grid sm:grid-cols-3 gap-4">
-          <Field label="Límite inicial mínimo"><Num value={p.limiteMin} onChange={(n) => set({ limiteMin: n })} /></Field>
-          <Field label="Límite máximo / tope de opciones"><Num value={p.limiteMax} onChange={(n) => set({ limiteMax: n })} /></Field>
+          <Field label="Suma asegurada mínima"><Num value={p.limiteMin} onChange={(n) => set({ limiteMin: n })} /></Field>
+          <Field label="Suma asegurada máxima / tope de opciones"><Num value={p.limiteMax} onChange={(n) => set({ limiteMax: n })} /></Field>
           <Field label="Vigencia de la cotización"><Num value={p.vigenciaDias} onChange={(n) => set({ vigenciaDias: n })} sufijo="días" /></Field>
           {['I', 'II', 'III'].map((id, i) => (
             <Field key={id} label={`Multiplicador opción ${id}`}>
@@ -305,11 +305,18 @@ function ParametrosRcView() {
               <Num value={p.diferenciacion[i] ?? 1} onChange={(n) => set({ diferenciacion: [0, 1, 2].map((j) => (j === i ? n : p.diferenciacion[j] ?? 1)) })} sufijo="×" />
             </Field>
           ))}
+          {['I', 'II', 'III'].map((id, i) => (
+            <Field key={`suma-${id}`} label={`Suma deseada × opción ${id}`}
+              hint={i === 0 ? 'La suma deseada máxima es el tope individual de la opción I.' : undefined}>
+              <Num value={p.factoresSumaDeseada[i] ?? i + 1}
+                onChange={(n) => set({ factoresSumaDeseada: [0, 1, 2].map((j) => (j === i ? n : p.factoresSumaDeseada[j] ?? j + 1)) })} sufijo="×" />
+            </Field>
+          ))}
         </div>
       </SectionCard>
 
       <SectionCard title="Opciones RC Patronal" description="Montos por empleado de las coberturas adicionales y límites por opción." Icon={Users}>
-        <Tabla cabecera={['Opción', 'Médica / empleado', 'Hernia / empleado', 'Límite individual (% nómina)', 'Tope individual', 'Tope colectivo']}>
+        <Tabla cabecera={['Opción', 'Médica / empleado', 'Hernia / empleado', 'Límite individual (% nómina)', 'Tope individual (I = suma deseada máx.)', 'Tope colectivo']}>
           {p.opcionesRcp.map((o, i) => {
             const upd = (c: Partial<typeof o>) => set({ opcionesRcp: p.opcionesRcp.map((x, j) => (j === i ? { ...x, ...c } : x)) });
             return (
