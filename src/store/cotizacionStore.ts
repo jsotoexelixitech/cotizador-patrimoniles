@@ -117,9 +117,7 @@ export const rifCompleto = (c: CotizacionState['comun']) => (c.documento ? `${c.
 export function solicitudRcg(s: Pick<CotizacionState, 'comun' | 'contrato' | 'rcg'>): SolicitudRcg {
   const { comun: c, contrato: k, rcg: r } = s;
   return {
-    // Vista cliente: no se pide «¿Quién elabora?»; va la sucursal y el responsable de la cotización en línea.
-    sucursal: MODO_CLIENTE ? EMISOR_CLIENTE.sucursal : c.sucursal, usuario: MODO_CLIENTE ? EMISOR_CLIENTE.emisor : c.emisor,
-    correoUsuario: MODO_CLIENTE ? EMISOR_CLIENTE.correo : c.correoEmisor, asegurado: c.asegurado, rif: rifCompleto(c),
+    sucursal: c.sucursal, usuario: c.emisor, correoUsuario: c.correoEmisor, asegurado: c.asegurado, rif: rifCompleto(c),
     correoDestinatario: c.correo, intermediario: c.intermediario, ubicacion: c.ubicacion, moneda: r.moneda, clase: r.clase,
     indole: r.indole, actividadEspecifica: r.actividadEspecifica, esContrato: k.esContrato, numeroContrato: k.numero,
     objetoObra: k.objeto, coasegurado: k.coasegurado, limite: numeroONulo(r.limite), tasa: numeroONulo(r.tasa), condiciones: r.condiciones,
