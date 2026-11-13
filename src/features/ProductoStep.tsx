@@ -39,7 +39,11 @@ const PRODUCTOS: { id: Producto; nombre: string; detalle: string; desc: string; 
  * El código sigue; se vuelve a mostrar con VITE_MOSTRAR_PLANES_SIS2000=1 en .env.local.
  */
 const MOSTRAR_PLANES = import.meta.env.VITE_MOSTRAR_PLANES_SIS2000 === '1';
-const PRODUCTOS_VISIBLES = PRODUCTOS.filter((p) => p.id !== 'planes' || MOSTRAR_PLANES);
+/** «Combo de coberturas» también oculto (13-nov-2026); se muestra con VITE_MOSTRAR_COMBO=1. */
+const MOSTRAR_COMBO = import.meta.env.VITE_MOSTRAR_COMBO === '1';
+const PRODUCTOS_VISIBLES = PRODUCTOS.filter(
+  (p) => (p.id !== 'planes' || MOSTRAR_PLANES) && (p.id !== 'combo' || MOSTRAR_COMBO),
+);
 
 const MODOS: [Modo, string][] = [['p', 'Solo Patronal (RCP)'], ['e', 'Solo Empresarial (RCE)'], ['both', 'Patronal + Empresarial']];
 
@@ -63,7 +67,7 @@ export function ProductoStep() {
 
   return (
     <div className="space-y-5">
-      <SectionCard title="¿Qué deseas cotizar?" description={MOSTRAR_PLANES ? 'Tarifa del cotizador (RCG o RCP/RCE), un plan ya configurado en Sis2000 o un combo con las coberturas de un ramo.' : 'Tarifa del cotizador (RCG o RCP/RCE) o un combo con las coberturas de un ramo de Sis2000.'} Icon={Layers}>
+      <SectionCard title="¿Qué deseas cotizar?" description={MOSTRAR_PLANES || MOSTRAR_COMBO ? 'Tarifa del cotizador (RCG o RCP/RCE), un plan ya configurado en Sis2000 o un combo con las coberturas de un ramo.' : 'Responsabilidad Civil General o RC Patronal / Empresarial, con la tarifa del cotizador.'} Icon={Layers}>
         <div className="grid sm:grid-cols-2 gap-3">
           {PRODUCTOS_VISIBLES.map((p) => {
             const active = producto === p.id;
