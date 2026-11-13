@@ -23,7 +23,38 @@ export default defineConfig(({ mode }) => {
     return req.method === 'GET'
       && /^\/nest\/api\/v1\/(valrep\/planes\/riesgos-generales|riesgos-generales\/(coberturas|ramos))(\?|$)/.test(url);
   };
-  const proxy: Record<string, ProxyOptions> | undefined = target
+  // /nexus va a Exélixi Nexus (cotizaciones guardadas, pago en línea) con la key del lado del servidor de Vite.
+  // NEXUS_API_URL y NEXUS_API_KEY van en .env.local sin prefijo VITE_. La key solo sirve para cotizaciones-rc.
+  const nexus = (env.NEXUS_API_URL || '').replace(/\/$/, '');
+  const esExterno = (req: { headers: { host?: string } }) => /\.trycloudflare\.com$/i.test(String(req.headers.host ?? '').split(':')[0]);
+  const rutaNexus = (url: string) => /^\/nexus\/api\/cotizaciones-rc(\/|\?|$)/.test(url);
+  // Cliente: guardar su cotización, traer una por código (sin parámetros: ni lista ni historial) y mandarla a pagar.
+  const rutaNexusCliente = (req: { url?: string; method?: string }) => {
+    const url = req.url ?? '';
+    if (req.method === 'POST') return /^\/nexus\/api\/cotizaciones-rc(\/[A-Za-z0-9-]+\/checkout)?$/.test(url);
+    return req.method === 'GET' && /^\/nexus\/api\/cotizaciones-rc\/[A-Za-z0-9-]+$/.test(url);
+  };
+  const proxyNexus: Record<string, ProxyOptions> = nexus
+    ? {
+        '/nexus': {
+          target: nexus,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/nexus/, ''),
+          headers: env.NEXUS_API_KEY ? { 'x-api-key': env.NEXUS_API_KEY } : {},
+          bypass: (req) => {
+            if (publico || !rutaNexus(req.url ?? '')) return false;
+            return (cliente || esExterno(req)) && !rutaNexusCliente(req) ? false : undefined;
+          },
+          // Nexus registra quién creó la cotización; lo decide el servidor, no el navegador.
+          configure: (p) => {
+            p.on('proxyReq', (proxyReq, req) => {
+              proxyReq.setHeader('x-cotizador-origen', cliente || esExterno(req) ? 'cliente' : 'admin');
+            });
+          },
+        },
+      }
+    : {};
+  const proxyNest: Record<string, ProxyOptions> | undefined = target
     ? {
         '/nest': {
           target,
@@ -42,6 +73,7 @@ export default defineConfig(({ mode }) => {
         },
       }
     : undefined;
+  const proxy: Record<string, ProxyOptions> | undefined = proxyNest || nexus ? { ...(proxyNest ?? {}), ...proxyNexus } : undefined;
 
   return {
     base: process.env.VITE_APP_BASE || '/',

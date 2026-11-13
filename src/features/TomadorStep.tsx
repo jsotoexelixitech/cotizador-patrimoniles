@@ -24,6 +24,12 @@ function validar(s: CotizacionState): Errores {
   if (rcg && !CORREO_RE.test(c.correo.trim())) e.correo = 'El correo del tomador es obligatorio y debe ser válido.';
   if (!rcg && c.correo && !CORREO_RE.test(c.correo.trim())) e.correo = 'Introduce un correo electrónico válido.';
   if (!rcg && !c.ubicacion.trim()) e.ubicacion = 'Indica la ubicación del riesgo.';
+  // Vista cliente, RCG: el cliente paga y emite en línea, así que el RIF y la dirección (los exige Sis2000) se piden ya.
+  if (MODO_CLIENTE && producto === 'rcg') {
+    const digitos = c.documento.replace(/\D/g, '');
+    if (!digitos || digitos.length > 9) e.documento = 'Indica el RIF o la cédula (hasta 9 dígitos).';
+    if (!c.ubicacion.trim()) e.ubicacion = 'Indica la ubicación del riesgo.';
+  }
   // Vista cliente: «¿Quién elabora la cotización?» no se muestra; el PDF lleva EMISOR_CLIENTE.
   if (!MODO_CLIENTE) {
     if (!SUCURSALES.includes(c.sucursal)) e.sucursal = 'Selecciona la sucursal.';
@@ -69,7 +75,7 @@ export function TomadorStep() {
               <Input value={c.apellido} maxLength={120} onChange={(e) => setComun({ apellido: e.target.value })} />
             </Field>
           )}
-          <Field label={rcg && !planes ? 'RIF (opcional)' : 'RIF'} error={errores.documento}
+          <Field label={rcg && !planes && !MODO_CLIENTE ? 'RIF (opcional)' : 'RIF'} error={errores.documento}
             hint={errores.documento ? undefined : 'Máximo 9 dígitos: 8 + el dígito verificador (ej. J-12345678-9 → 123456789). Obligatorio para emitir.'}>
             <IdentityInput
               tipoDoc={c.tipoDoc}
@@ -93,7 +99,7 @@ export function TomadorStep() {
               <Input value={c.intermediario} onChange={(e) => setComun({ intermediario: e.target.value })} placeholder="Nombre o código" />
             </Field>
           )}
-          <Field label={rcg && !planes ? 'Ubicación del riesgo (opcional)' : 'Ubicación del riesgo'} error={errores.ubicacion} full>
+          <Field label={rcg && !planes && !MODO_CLIENTE ? 'Ubicación del riesgo (opcional)' : 'Ubicación del riesgo'} error={errores.ubicacion} full>
             <Textarea rows={2} value={c.ubicacion} onChange={(e) => setComun({ ubicacion: e.target.value })} placeholder="Estado, ciudad, urbanización, calle…" />
           </Field>
         </div>

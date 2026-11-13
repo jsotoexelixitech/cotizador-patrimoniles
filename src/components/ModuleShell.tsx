@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft, Beef, HelpCircle, Settings2, Sparkles, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, Beef, FolderSearch, HelpCircle, Home, Settings2, Sparkles, ShieldCheck } from 'lucide-react';
 import { AuroraBackground } from './AuroraBackground';
 import { TopProgressBar } from './TopProgressBar';
 import { TopStepper } from './TopStepper';
@@ -26,6 +26,24 @@ const VISTA_PASTORA = {
   description: 'Póliza de biomasa ganadera: suma asegurada = kg iniciales × precio por kg. La prima la calcula nest-api.',
 };
 
+const VISTA_COTIZACIONES = {
+  eyebrow: 'Historial · Exélixi Nexus',
+  title: 'Cotizaciones',
+  description: 'Busca por código, tomador, fecha o estado; abre el detalle, mándala a pagar o reábrela en el cotizador.',
+};
+
+const VISTA_INICIO = {
+  eyebrow: 'Responsabilidad Civil',
+  title: 'Cotiza y contrata en línea',
+  description: 'Haz una cotización nueva o trae la que ya tienes con su código para elegir tu opción y pagar.',
+};
+
+const VISTA_CONSULTA = {
+  eyebrow: 'Tu cotización',
+  title: 'Elige, paga y recibe tu póliza',
+  description: 'Revisa las opciones de tu cotización, elige una y paga en línea: la póliza se emite al confirmarse el pago.',
+};
+
 /** Link público (COTIZADOR_PUBLICO=1): solo el formulario de Pastora, sin volver al cotizador. */
 const SOLO_PASTORA = import.meta.env.VITE_SOLO_PASTORA === '1';
 
@@ -38,8 +56,10 @@ export function ModuleShell({ children }: { children: ReactNode }) {
   const personalizado = useParametrosStore((s) => esPersonalizado(s));
   // Pastora es una vista aparte como Parámetros: sin stepper del cotizador.
   const pastora = vista === 'pastora';
-  const parametros = vista === 'parametros' || pastora;
-  const current = pastora ? VISTA_PASTORA : parametros ? VISTA_PARAMETROS : MODULE_STEPS.find((s) => s.n === step) ?? MODULE_STEPS[0];
+  // Toda vista que no es el asistente va sin stepper (Parámetros, Pastora, Cotizaciones, portada y cotización guardada).
+  const parametros = vista !== 'cotizador';
+  const current = pastora ? VISTA_PASTORA : vista === 'parametros' ? VISTA_PARAMETROS : vista === 'cotizaciones' ? VISTA_COTIZACIONES
+    : vista === 'inicio' ? VISTA_INICIO : vista === 'consulta' ? VISTA_CONSULTA : MODULE_STEPS.find((s) => s.n === step) ?? MODULE_STEPS[0];
 
   return (
     <div className="min-h-screen relative">
@@ -84,6 +104,16 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 {!MODO_CLIENTE && <>
                 <button
                   type="button"
+                  onClick={() => { setVista(vista === 'cotizaciones' || vista === 'consulta' ? 'cotizador' : 'cotizaciones'); window.scrollTo({ top: 0 }); }}
+                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all hover:-translate-y-0.5 ${
+                    vista === 'cotizaciones' || vista === 'consulta' ? 'bg-indigo-700 text-white shadow-[0_8px_22px_rgba(15,26,90,0.3)]' : 'glass-light text-slate-600 hover:text-indigo-600'
+                  }`}
+                >
+                  {vista === 'cotizaciones' || vista === 'consulta' ? <ArrowLeft size={13} /> : <FolderSearch size={13} />}
+                  {vista === 'cotizaciones' || vista === 'consulta' ? 'Volver al cotizador' : 'Cotizaciones'}
+                </button>
+                <button
+                  type="button"
                   onClick={() => { setVista(vista === 'parametros' ? 'cotizador' : 'parametros'); window.scrollTo({ top: 0 }); }}
                   className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-bold transition-all hover:-translate-y-0.5 ${
                     vista === 'parametros' ? 'bg-indigo-700 text-white shadow-[0_8px_22px_rgba(15,26,90,0.3)]' : 'glass-light text-slate-600 hover:text-indigo-600'
@@ -104,6 +134,15 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 </button>
                 </>}
               </div>}
+              {/* Vista cliente: desde cualquier pantalla se vuelve a la portada (nueva cotización o traer una por código). */}
+              {!SOLO_PASTORA && MODO_CLIENTE && vista !== 'inicio' && (
+                <div className="no-imprimir">
+                  <button type="button" onClick={() => { setVista('inicio'); window.scrollTo({ top: 0 }); }}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full glass-light text-slate-600 hover:text-indigo-600 text-xs font-bold transition-all hover:-translate-y-0.5">
+                    <Home size={13} /> Inicio
+                  </button>
+                </div>
+              )}
             </div>
           </header>
 

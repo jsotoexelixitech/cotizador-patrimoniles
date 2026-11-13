@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Mail, Printer, RotateCcw, Send, ShieldCheck, Stamp, User } from 'lucide-react';
+import { CreditCard, Download, ExternalLink, FileCheck2, FileText, Loader2, Lock, Mail, Printer, RotateCcw, Send, ShieldCheck, Stamp, User } from 'lucide-react';
 import { documentosRcg, documentosRcgSis2000, urlDocumento, type DocumentoRcg } from '../pdf/condicionadosRcg';
 import { useParametrosStore } from '../store/parametrosStore';
 import { toast } from '../store/toastStore';
@@ -30,6 +30,9 @@ import { emitirCoberturas } from '../api/patrimonial';
 import type { ResultadoEmision } from '../tarifas/planes-rcg';
 import { correoValido, errorTamanoPdf, tamanoLegible } from '../correo/correoCotizacion';
 import { EMISOR_CLIENTE, MODO_CLIENTE } from '../config/modoCliente';
+import { esCodigoOficial, registrarEmisionPendiente } from '../api/cotizaciones';
+import { datosCotizacionRc, datosCotizacionRcg, huellaCotizacion } from '../cotizaciones/snapshot';
+import { useCotizacionGuardadaStore } from '../store/cotizacionGuardadaStore';
 
 function Dato({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -154,8 +157,42 @@ export function EmisionStep() {
   const vigenciaDias = useParametrosStore((p) => p.rcg.vigenciaDias);
   const [generando, setGenerando] = useState(false);
   const [correoAbierto, setCorreoAbierto] = useState(false);
-  // Número provisional hasta tener el correlativo oficial desde el backend.
-  const [numero] = useState(() => `RCG-${new Date().getFullYear()}-P${String(Date.now()).slice(-6)}`);
+  // Número provisional: se usa mientras Nexus guarda la cotización, o si Nexus falla (se sigue cotizando igual).
+  const [provisional] = useState(() => `RCG-${new Date().getFullYear()}-P${String(Date.now()).slice(-6)}`);
+  const cotRc = useCotizacionRc();
+  const prmRcg = useParametrosStore((p) => p.rcg);
+  const prmRc = useParametrosStore((p) => p.rc);
+  const guardada = useCotizacionGuardadaStore();
+  const abrirConsulta = useWizardStore((w) => w.abrirConsulta);
+  // RCG y RCP/RCE se guardan en Exélixi Nexus al llegar al resumen: el código oficial reemplaza al provisional.
+  const guardable = !SOLO_PASTORA && (rcg ? cotRcg.alternativas.length > 0 : s.producto === 'rc' && !cotRc.errores.length && cotRc.total > 0);
+  const huella = guardable ? huellaCotizacion(s, { rcg: prmRcg, rc: prmRc }) : null;
+  useEffect(() => {
+    if (!huella) return;
+    void guardada.guardar(huella, async () => {
+      if (!rcg) return datosCotizacionRc(s, cotRc, { vigenciaDias: 15 });
+      // Coberturas y planes del ramo 28 en Sis2000: con ellos queda armada la emisión de cada opción para el pago en línea.
+      const cramo = RAMOS_RC.rcg;
+      void usePlanesStore.getState().cargarCatalogo(cramo);
+      void usePlanesStore.getState().cargarContenedores();
+      const listo = () => {
+        const p = usePlanesStore.getState();
+        return !!p.catalogos[cramo] && !p.catalogos[cramo].cargando && !p.cargandoContenedores && (p.contenedores !== null || !!p.errorContenedores);
+      };
+      for (let i = 0; i < 100 && !listo(); i++) await new Promise((r) => setTimeout(r, 150));
+      const p = usePlanesStore.getState();
+      return datosCotizacionRcg(s, cotRcg, {
+        mesaTecnica, vigenciaDias,
+        emision: {
+          catalogo: p.catalogos[cramo]?.coberturas ?? null, contenedores: p.contenedores, planConfigurado: import.meta.env.VITE_RCG_PLAN_CONTENEDOR,
+          cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080, esPersonaNatural: esPersonaNatural(c.tipoDoc),
+        },
+      });
+    });
+  }, [huella]); // eslint-disable-line react-hooks/exhaustive-deps
+  const guardando = !!huella && (guardada.guardando || guardada.huella !== huella);
+  const codigo = huella && guardada.huella === huella ? guardada.codigo : null;
+  const numero = codigo ?? provisional;
 
   // Plan de Sis2000 o combo del ramo 28 (RCG): mismo condicionado y anexos que la cotización RCG, por ccober o por nombre.
   const planElegido = listaPlanes.find((p) => p.cplan === s.planSel);
@@ -289,15 +326,33 @@ export function EmisionStep() {
       {!MODO_CLIENTE && (planes ? <EmitirPlan docs={docsSis2000} /> : combo ? <EmitirCombo numero={numero} docs={docsSis2000} />
         : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />)}
 
+      {/* Código oficial de Nexus: con él el cliente trae la cotización, elige opción y paga; el canal la manda a pagar. */}
+      {guardando && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Guardando la cotización…</p>}
+      {codigo && (
+        <SectionCard title={`Código de cotización: ${codigo}`} Icon={CreditCard} statusLabel="Guardada" statusTone="success"
+          description={MODO_CLIENTE
+            ? 'Guárdalo: con este código puedes volver durante 15 días, elegir una de las opciones y pagar en línea.'
+            : 'Guardada en Exélixi Nexus. El cliente puede traerla con este código durante 15 días y pagar en línea.'}>
+          {rcg && (
+            <Button variant={MODO_CLIENTE ? 'primary' : 'secondary'} size="lg" onClick={() => { abrirConsulta(codigo); window.scrollTo({ top: 0 }); }}>
+              <CreditCard size={15} /> {MODO_CLIENTE ? 'Elegir opción y pagar' : 'Mandar a pagar'}
+            </Button>
+          )}
+        </SectionCard>
+      )}
+      {huella && !guardando && !codigo && guardada.error && (
+        <Aviso>No se pudo guardar la cotización en Exélixi Nexus ({guardada.error}) Sigue con el número provisional <strong>{provisional}</strong>: se puede descargar y enviar, pero no traer por código ni pagar en línea.</Aviso>
+      )}
+
       <p className="text-[0.72rem] text-slate-500">
         Cotización válida por {rcg || combo ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
-        {(rcg || planes || combo) && <> N.º provisional <strong>{numero}</strong> (el correlativo oficial se asignará al conectar el backend).</>}
+        {(rcg || planes || combo) && !codigo && !guardando && <> N.º provisional <strong>{numero}</strong>.</>}
       </p>
 
       {/* Admin: se abre con el botón y se confirma. Cliente: se envía solo al llegar aquí. */}
-      {(correoAbierto || MODO_CLIENTE) && (rcg || planes || combo) && (
+      {(correoAbierto || MODO_CLIENTE) && (rcg || planes || combo) && !guardando && (
         // vigenciaDias: la misma validez que imprime el PDF adjunto.
-        <EnviarCorreoCotizacion correoInicial={c.correo} nombre={c.asegurado} numero={numero} vigenciaDias={vigenciaDias}
+        <EnviarCorreoCotizacion key={numero} correoInicial={c.correo} nombre={c.asegurado} numero={numero} vigenciaDias={vigenciaDias}
           generar={generarPdf} onCerrar={() => setCorreoAbierto(false)} auto={MODO_CLIENTE} />
       )}
 
@@ -896,6 +951,11 @@ function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerid
       }));
       setResultado(r);
       toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
+      // La cotización guardada en Nexus queda emitida (recibo pendiente); si falla el aviso, la póliza ya está emitida.
+      if (esCodigoOficial(ncotizacion)) {
+        const opcion = /opción (I{1,3})$/.exec(titulo)?.[1] as 'I' | 'II' | 'III' | undefined;
+        void registrarEmisionPendiente(ncotizacion, opcion ?? null, r).catch(() => undefined);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {

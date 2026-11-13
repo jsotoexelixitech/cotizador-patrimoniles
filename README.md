@@ -79,3 +79,12 @@ I/II/III, reglas en Bs, 11 clases y 344 actividades con sus equivalencias (RCP/R
 las coberturas marcadas y el intermediario, igual que el documento de La Mundial. Logo, sello y plantilla de la
 solicitud en `src/pdf/assets/` (extraídos del cotizador Apps Script). El N.º es provisional hasta tener el correlativo
 oficial desde el backend.
+
+## Cotizaciones guardadas, pago en línea y descuentos
+
+- Al llegar al resumen, RCG y RCP/RCE se guardan en Exélixi Nexus (`/api/cotizaciones-rc`, proxy `/nexus`) y reciben un código oficial (`RCG-2026-000123-7KQ4`). Si Nexus falla, se sigue con el número provisional y se avisa.
+- Variables en `.env.local` (sin prefijo `VITE_`, se quedan en el servidor de Vite): `NEXUS_API_URL` y `NEXUS_API_KEY`. Opcional: `VITE_RCG_PLAN_CONTENEDOR` (plan del ramo 28 para emitir el RCG pagado en línea).
+- Admin: botón **Cotizaciones** (buscar por código, tomador, fecha y estado; historial completo, incluidas las vencidas; ver, mandar a pagar y reabrir).
+- Cliente: portada con «Nueva cotización» y «Ya tengo un código de cotización». Con el código trae la cotización (15 días), elige la opción I, II o III y paga en el módulo de Pagos; con el pago confirmado Nexus emite la póliza y cobra el recibo. El navegador del cliente nunca emite: por el link del cliente el proxy solo deja guardar, traer por código y mandar a pagar.
+- Pago en línea: solo RCG en USD o Bs., con RIF y dirección, sin mesa técnica. RCP/RCE se guardan y se consultan, pero se emiten con el asesor.
+- Parámetros → **Configurar descuentos**: tramos «desde suma asegurada → % de descuento sobre la tasa básica» (RCG: suma de cada opción; RCP/RCE en USD/EUR: límite por evento). Sin tramos no cambia nada; el descuento solo se ve en vista técnica y se guarda con la cotización.

@@ -9,4 +9,6 @@ interface ImportMetaEnv {
   readonly VITE_RC_EMITIR?: string;
   /** '1' = vista cliente (link al cliente): lo define vite.config.ts con COTIZADOR_CLIENTE=1. */
   readonly VITE_MODO_CLIENTE?: string;
+  /** Plan contenedor del ramo 28 para emitir el RCG pagado en línea (p. ej. PBT1 o RCGGEN); sin él, PLANI / PLANII / PLAN3. */
+  readonly VITE_RCG_PLAN_CONTENEDOR?: string;
 }
