@@ -840,8 +840,9 @@ function ResumenRc() {
       {cot.resultados.map((r) => (
         <SectionCard key={r.k} title={NOMBRES[r.k]} description={r.riesgo?.[0]} Icon={ShieldCheck}
           statusLabel={r.opcion ? `Opción ${r.opcion}` : undefined}>
-          <div className="grid sm:grid-cols-4 gap-4">
-            <Dato label="Tasa final">{porcentaje(r.tasaEfectiva)}</Dato>
+          <div className={`grid gap-4 ${MODO_CLIENTE ? 'sm:grid-cols-3' : 'sm:grid-cols-4'}`}>
+            {/* Vista cliente: sin tasas ni porcentajes. */}
+            {!MODO_CLIENTE && <Dato label="Tasa final">{porcentaje(r.tasaEfectiva)}</Dato>}
             <Dato label="Límite por trabajador">{m(r.limites[0])}</Dato>
             <Dato label="Dos o más trabajadores">{m(r.limites[1])}</Dato>
             <Dato label="Por evento / año póliza">{m(r.limites[2])}</Dato>
