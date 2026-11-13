@@ -300,6 +300,13 @@ function Cotizacion({ codigo }: { codigo: string }) {
                 <tr><th className="text-left font-bold px-3 py-2">Cobertura</th><th className="text-right font-bold px-3 py-2">Opción {elegida.opcion}</th></tr>
               </thead>
               <tbody>
+                {/* RCG: la cobertura básica es obligatoria; su suma es el límite de la opción (va en la emisión como cobertura 1). */}
+                {d.producto === 'rcg' && (
+                  <tr className="border-t border-slate-100 bg-indigo-50/40 font-semibold">
+                    <td className="px-3 py-1.5">Cobertura básica: R.C. Predios y Operaciones</td>
+                    <td className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(elegida.limite)}</td>
+                  </tr>
+                )}
                 {d.coberturas.map((x) => (
                   <tr key={x.nombre} className="border-t border-slate-100">
                     <td className="px-3 py-1.5">{x.nombre}</td>
