@@ -29,6 +29,7 @@ export default defineConfig(({ mode }) => {
   const esExterno = (req: { headers: { host?: string } }) => /\.trycloudflare\.com$/i.test(String(req.headers.host ?? '').split(':')[0]);
   const rutaNexus = (url: string) => /^\/nexus\/api\/cotizaciones-rc(\/|\?|$)/.test(url);
   // Cliente: guardar su cotización, traer una por código (sin parámetros: ni lista ni historial) y mandarla a pagar.
+  // «Emitir como pendiente» (/:codigo/emitir-pendiente) queda fuera a propósito: es solo del canal; el cliente siempre paga.
   const rutaNexusCliente = (req: { url?: string; method?: string }) => {
     const url = req.url ?? '';
     if (req.method === 'POST') return /^\/nexus\/api\/cotizaciones-rc(\/[A-Za-z0-9-]+\/checkout)?$/.test(url);

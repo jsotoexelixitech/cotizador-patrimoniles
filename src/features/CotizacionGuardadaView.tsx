@@ -3,7 +3,7 @@ import {
   ArrowLeft, Check, Copy, CreditCard, Download, ExternalLink, FileCheck2, FileText, Loader2, MailCheck, Pencil, RefreshCw, Search, ShieldCheck, User,
 } from 'lucide-react';
 import {
-  crearCheckout, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, traerCotizacion, type Checkout, type CotizacionGuardada, type PolizaDeCotizacion,
+  crearCheckout, emitirComoPendiente, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, traerCotizacion, type Checkout, type CotizacionGuardada, type PolizaDeCotizacion,
 } from '../api/cotizaciones';
 import { Aviso } from '../components/ui/Aviso';
 import { Badge } from '../components/ui/Badge';
@@ -145,6 +145,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
   const [opcion, setOpcion] = useState<Opcion | null>(null);
   const [acepta, setAcepta] = useState(false);
   const [ocupado, setOcupado] = useState(false);
+  const [emitiendo, setEmitiendo] = useState(false);
   const [errorPago, setErrorPago] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<Checkout | null>(null);
   const consultas = useRef(0);
@@ -165,7 +166,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
   // diga si envió el correo de la póliza (lo manda el servidor justo después de emitir).
   const vioSinEmitir = useRef(false);
   if (cot && cot.estado !== 'emitida') vioSinEmitir.current = true;
-  const esperaCorreo = !!cot && cot.estado === 'emitida' && !!cot.pago?.referencia && !cot.correoPoliza && vioSinEmitir.current;
+  const esperaCorreo = !!cot && cot.estado === 'emitida' && (!!cot.pago?.referencia || !!cot.canal) && !cot.correoPoliza && vioSinEmitir.current;
 
   // Mientras el pago está en curso o la póliza se está emitiendo, se consulta el estado: la emisión ocurre en Nexus.
   const enEspera = !!cot && !cot.vencida && !cot.error && (cot.estado === 'pendiente_pago' || cot.estado === 'pagada' || esperaCorreo);
@@ -215,6 +216,34 @@ function Cotizacion({ codigo }: { codigo: string }) {
       setErrorPago(e instanceof Error ? e.message : String(e));
     } finally {
       setOcupado(false);
+    }
+  };
+
+  /**
+   * Canal (solo admin): Nexus emite sin pago la(s) póliza(s) de la opción; el recibo queda pendiente de cobro. El
+   * cliente nunca llega aquí: el botón no se pinta en su vista, el proxy bloquea la ruta y Nexus exige el origen admin.
+   */
+  const emitirPendiente = async () => {
+    if (!admin || !elegida) return;
+    const cuantas = aPagar.length > 1 ? `las ${aPagar.length} pólizas` : 'la póliza';
+    if (!window.confirm(`Se emitirá sin pago ${cuantas} de la opción ${elegida.opcion} (${m(elegida.prima)}); el recibo queda pendiente de cobro. ¿Emitir como pendiente?`)) return;
+    setOcupado(true);
+    setEmitiendo(true);
+    setErrorPago(null);
+    try {
+      const anexos = await anexosParaCheckout(cot.codigo, docs, { nombre: d.tomador.nombre, rif: d.tomador.rif });
+      const c = await emitirComoPendiente(cot.codigo, elegida.opcion, anexos);
+      setCheckout(null);
+      consultas.current = 0;
+      setCot(c);
+      toast.success(aPagar.length > 1 ? 'Pólizas emitidas como pendientes' : 'Póliza emitida como pendiente', cot.codigo);
+    } catch (e) {
+      setErrorPago(e instanceof Error ? e.message : String(e));
+      // Si la emisión quedó a medias (RCP + RCE) o siguió en Nexus, la cotización lo dice.
+      await cargar(true);
+    } finally {
+      setOcupado(false);
+      setEmitiendo(false);
     }
   };
 
@@ -321,7 +350,35 @@ function Cotizacion({ codigo }: { codigo: string }) {
         {d.condiciones.length > 0 && <ul className="list-disc pl-5 mt-2 space-y-0.5 text-[0.72rem] text-slate-500">{d.condiciones.map((x) => <li key={x}>{x}</li>)}</ul>}
       </SectionCard>
 
-      {abierta && (
+      {/* Emisión del canal sin pago en curso o a medias (RCP + RCE): ya no se paga en línea; se completa sin cobrar. */}
+      {abierta && cot.canal && (
+        <SectionCard title="Emisión por el canal" Icon={FileCheck2} statusLabel={cot.error ? 'Sin completar' : 'Emitiendo'} statusTone="warning">
+          {!admin
+            ? <p className="text-sm text-slate-700">Tu asesor de seguros está emitiendo tu póliza.</p>
+            : cot.error
+              ? <Aviso>La emisión sin pago de la opción {cot.canal.opcion} no se completó{errorPago ? `: ${errorPago}` : '. Revisa el log de nexus-api y reintenta.'}</Aviso>
+              : <p className="flex items-center gap-2 text-sm text-slate-700"><Loader2 size={14} className="animate-spin" /> Emitiendo sin pago la opción {cot.canal.opcion}…</p>}
+          {admin && polizas.length > 0 && (
+            <ul className="mt-3 space-y-1 text-[0.8rem] text-slate-700">
+              {polizas.map((p) => (
+                <li key={p.cnpoliza} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <FileCheck2 size={13} className="text-emerald-600" /> <span>{nombrePoliza(p)}: póliza <strong>{p.cnpoliza}</strong> emitida, recibo pendiente de cobro.</span> {verPoliza(p)}
+                </li>
+              ))}
+              {aPagar.filter((x) => !polizas.some((p) => p.cramo === x.cramo)).map((x) => <li key={x.cramo} className="text-amber-700">{x.nombre}: falta por emitir.</li>)}
+            </ul>
+          )}
+          {admin && cot.error && (
+            <div className="mt-3">
+              <Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}>
+                {ocupado ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} {polizas.length ? 'Reintentar la póliza que falta (sin cobrar)' : 'Reintentar la emisión (sin cobrar)'}
+              </Button>
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {abierta && !cot.canal && (
         <SectionCard title={admin ? 'Mandar a pagar' : 'Pagar y emitir la póliza'} Icon={CreditCard}
           description={admin
             ? 'Genera el enlace del módulo de Pagos. Con el pago confirmado la póliza se emite sola, como pagada.'
@@ -359,8 +416,16 @@ function Cotizacion({ codigo }: { codigo: string }) {
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant="primary" size="lg" disabled={!acepta || ocupado} onClick={() => void pagar()}>
                   {ocupado ? <Loader2 size={15} className="animate-spin" /> : <CreditCard size={15} />}
-                  {ocupado ? 'Abriendo el pago…' : admin ? 'Generar enlace de pago' : `Pagar ${m(elegida!.prima)}`}
+                  {ocupado && !emitiendo ? 'Abriendo el pago…' : admin ? 'Generar enlace de pago' : `Pagar ${m(elegida!.prima)}`}
                 </Button>
+                {/* Solo el canal: el cliente siempre paga (ni el proxy ni Nexus aceptan esta emisión desde su vista). */}
+                {admin && (
+                  <Button variant="secondary" size="lg" disabled={!acepta || ocupado} onClick={() => void emitirPendiente()}
+                    title="Se emitirá sin pago; el recibo queda pendiente de cobro">
+                    {emitiendo ? <Loader2 size={15} className="animate-spin" /> : <FileCheck2 size={15} />}
+                    {emitiendo ? 'Emitiendo…' : 'Emitir como pendiente (canal)'}
+                  </Button>
+                )}
                 {cot.estado === 'pendiente_pago' && (
                   <p className="text-[0.78rem] text-slate-500 flex items-center gap-2"><Loader2 size={13} className="animate-spin" /> Esperando la confirmación del pago… Si ya pagaste, la póliza aparecerá aquí.</p>
                 )}
@@ -439,6 +504,14 @@ function Cotizacion({ codigo }: { codigo: string }) {
             )}
             {admin && !correoEnviado && cot.correoPoliza?.error && (
               <div className="mt-3"><Aviso tono="error">El correo automático de la póliza no salió: {cot.correoPoliza.error}</Aviso></div>
+            )}
+            {/* Emitida por el canal sin pago: el recibo se cobra en caja; aquí solo se reenvía el correo si no salió. */}
+            {admin && cot.canal && !cot.pago?.referencia && !correoEnviado && !!cot.correoPoliza?.error && (
+              <div className="mt-3">
+                <Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}>
+                  {ocupado ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />} Reenviar el correo de la póliza
+                </Button>
+              </div>
             )}
             {admin && cot.pago?.referencia && (!cobrado || !correoEnviado) && (
               <div className="mt-3">

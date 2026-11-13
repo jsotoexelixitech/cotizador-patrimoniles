@@ -40,6 +40,8 @@ export interface CotizacionGuardada {
   /** La lista no trae el JSON completo. */
   datos?: DatosCotizacion;
   pago: { opcion?: Opcion; totalVes?: number; tasa?: number; checkoutUrl?: string; referencia?: string; monto?: number; fecha?: string } | null;
+  /** Emisión sin pago hecha por el canal desde la cotización guardada (en curso, a medias o terminada): ya no se paga en línea. */
+  canal?: { opcion: Opcion } | null;
   poliza: PolizaGuardada | null;
   /** Correo automático de la póliza (lo envía Nexus al quedar emitida la cotización pagada); null si aún no se intentó. */
   correoPoliza?: { enviadoEn: string | null; a: string | null; error: string | null } | null;
@@ -97,6 +99,14 @@ export interface AnexosCheckout { nombre: string; base64: string }
  */
 export const crearCheckout = (codigo: string, opcion: Opcion, returnUrl: string, anexos?: AnexosCheckout | null) =>
   pedir<Checkout>(`/${encodeURIComponent(codigo)}/checkout`, json('POST', { opcion, returnUrl, ...(anexos ? { anexos } : {}) }));
+
+/**
+ * Canal (solo vista admin; el proxy no deja pasar la ruta por el link del cliente y Nexus exige el origen admin):
+ * Nexus emite sin pago la(s) póliza(s) de la opción y el recibo queda pendiente de cobro en Sis2000. Devuelve la
+ * cotización ya emitida; el correo de la póliza sale después, sin recibo.
+ */
+export const emitirComoPendiente = (codigo: string, opcion: Opcion, anexos?: AnexosCheckout | null) =>
+  pedir<CotizacionGuardada>(`/${encodeURIComponent(codigo)}/emitir-pendiente`, json('POST', { opcion, ...(anexos ? { anexos } : {}) }));
 
 /** Emisión hecha por el canal con recibo pendiente de cobro. */
 export const registrarEmisionPendiente = (codigo: string, opcion: Opcion | null, poliza: { cnpoliza: string; cnrecibo: string; urlpoliza: string }) =>
