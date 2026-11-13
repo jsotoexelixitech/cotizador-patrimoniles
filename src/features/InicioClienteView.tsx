@@ -40,7 +40,7 @@ export function InicioClienteView() {
           Trae tu cotización, elige una de las tres opciones, paga en línea y recibe tu póliza. El código vale 15 días.
         </p>
         <form className="mt-4 space-y-3" onSubmit={(e) => { e.preventDefault(); buscar(); }}>
-          <Field label="Código de cotización" error={intento && !valido ? (/-Pd{6}$/i.test(codigo.trim()) ? 'Ese número es provisional: esa cotización no quedó guardada y no se puede traer. Pide una cotización nueva.' : 'El código tiene esta forma: RCG-2026-000123-7KQ4.') : undefined}>
+          <Field label="Código de cotización" error={intento && !valido ? (/-P\d{6}$/i.test(codigo.trim()) ? 'Ese número es provisional: esa cotización no quedó guardada y no se puede traer. Pide una cotización nueva.' : 'El código tiene esta forma: RCG-2026-000123-7KQ4.') : undefined}>
             <Input value={codigo} maxLength={24} placeholder="RCG-2026-000123-7KQ4" className="uppercase tabular-nums"
               onChange={(e) => setCodigo(e.target.value.toUpperCase().replace(/\s+/g, ''))} />
           </Field>
