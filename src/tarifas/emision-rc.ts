@@ -82,11 +82,20 @@ export function coberturasRc(r: ResultadoProducto, monedaRc: string, catalogo?: 
   const adicionales = elegida
     ? elegida.detalleOpcionales.map((d) => ({ nombre: d.nombre, prima: d.prima }))
     : r.lineas.filter((l) => normalizar(l.nombre) !== normalizar('Cobertura básica')).map((l) => ({ nombre: l.nombre, prima: 0 }));
-  const primaAdicionales = adicionales.reduce((s, a) => s + a.prima, 0);
-  return armar(cotizador, monedaSis2000(monedaRc), [
+  // La prima la fija el cotizador: Sis2000 solo recibe las líneas. Una cobertura sin código de Sis2000 en esa moneda
+  // (o fuera del ramo) no bloquea la emisión: si es adicional, su prima se suma a la básica (la prima total no cambia);
+  // si es de las incluidas (prima 0), no se envía como línea propia.
+  const moneda = monedaSis2000(monedaRc);
+  const conCodigo = (nombre: string) => {
+    const ccober = buscar(mapeo, nombre)?.ccober[moneda];
+    return !!ccober && (!catalogo || catalogo.some((c) => c.ccober === ccober));
+  };
+  const adicionalesConCodigo = adicionales.filter((a) => conCodigo(a.nombre));
+  const primaAdicionales = adicionalesConCodigo.reduce((s, a) => s + a.prima, 0);
+  return armar(cotizador, moneda, [
     { m: basica, concepto: basica.concepto, suma: porEvento, prima: r.prima - primaAdicionales },
-    ...fijas.map((nombre) => ({ m: buscar(mapeo, nombre), concepto: nombre, suma: porTrabajador, prima: 0 })),
-    ...adicionales.map((a) => ({ m: buscar(mapeo, a.nombre), concepto: a.nombre, suma: porTrabajador, prima: a.prima })),
+    ...fijas.filter(conCodigo).map((nombre) => ({ m: buscar(mapeo, nombre), concepto: nombre, suma: porTrabajador, prima: 0 })),
+    ...adicionalesConCodigo.map((a) => ({ m: buscar(mapeo, a.nombre), concepto: a.nombre, suma: porTrabajador, prima: a.prima })),
   ], catalogo);
 }
 

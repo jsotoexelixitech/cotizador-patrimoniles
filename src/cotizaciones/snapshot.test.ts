@@ -180,10 +180,10 @@ describe('cotización RCP / RCE guardada', () => {
     const conDescuento = datosCotizacionRc(s, cotizarRc({ ...base, p: { ...base.p, ajuste: -5 } }), { vigenciaDias: 15, emision: sis2000 });
     expect(conDescuento.emisiones).toBeUndefined();
     expect(conDescuento.sinPagoEnLinea[0]).toContain('área técnica');
-    // Hernia no existe en USD en Sis2000: esa cotización no se puede emitir sola.
+    // Hernia sin código en USD en Sis2000: su prima va en la básica; se paga y emite igual (plan genérico).
     const hernia = datosCotizacionRc(s, cotizarRc({ ...base, p: { ...base.p, adicionales: [false, true] } }), { vigenciaDias: 15, emision: sis2000 });
-    expect(hernia.emisiones).toBeUndefined();
-    expect(hernia.sinPagoEnLinea[0]).toContain('Hernia');
+    expect(hernia.emisiones).toBeDefined();
+    expect(hernia.sinPagoEnLinea).toEqual([]);
   });
 
   it('plan contenedor de RCP / RCE: el configurado si está vigente o el único del ramo', () => {

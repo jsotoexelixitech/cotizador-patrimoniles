@@ -104,9 +104,12 @@ describe('RCP / RCE → Sis2000 ramos 27 y 37', () => {
     expect(e.lineas.filter((l) => ['2', '3', '4', '5', '6', '7', '8'].includes(l.ccober)).every((l) => l.prima === 0 && l.suma === r.limites[0])).toBe(true);
   });
 
-  it('RCP USD con hernia: no hay hernia en USD en Sis2000 y bloquea', () => {
+  it('RCP USD con hernia: sin código en USD, su prima va en la básica y no bloquea (manda la prima del cotizador)', () => {
     const conHernia = cotizarRc({ ...base, modo: 'p', p: { ...base.p, adicionales: [false, true] } });
-    expect(coberturasRc(conHernia.resultados[0], 'USD').sinMapeo).toEqual(['Hernia (sin cobertura en USD)']);
+    const e = coberturasRc(conHernia.resultados[0], 'USD');
+    expect(e.sinMapeo).toEqual([]);
+    expect(e.lineas.some((l) => /hernia/i.test(l.concepto))).toBe(false);
+    expect(e.primaTotal).toBe(conHernia.resultados[0].prima);
   });
 
   it('RCE USD con negligencia y gastos médicos: 9 y 11 con su prima', () => {
@@ -118,11 +121,12 @@ describe('RCP / RCE → Sis2000 ramos 27 y 37', () => {
     expect(e.primaTotal).toBe(r.prima);
   });
 
-  it('RCE en EUR: solo la básica existe en EUR y el resto bloquea', () => {
+  it('RCE en EUR: solo la básica existe en EUR; lleva toda la prima y no bloquea', () => {
     const r = cotizarRc({ ...base, moneda: 'EUR' }).resultados.find((x) => x.k === 'e')!;
     const e = coberturasRc(r, 'EUR');
     expect(e.lineas.map((l) => l.ccober)).toEqual(['13']);
-    expect(e.sinMapeo.length).toBeGreaterThan(0);
+    expect(e.sinMapeo).toEqual([]);
+    expect(e.primaTotal).toBe(r.prima);
   });
 });
 
