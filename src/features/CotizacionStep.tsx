@@ -665,6 +665,11 @@ export function TablaCoberturas({ cot }: { cot: ReturnType<typeof useCotizacionR
           </tr>
         </thead>
         <tbody>
+          {/* Cobertura básica (como en el Sheet y el PDF): su suma es el límite de cada opción. */}
+          <tr className="border-t border-slate-100 bg-indigo-50/40 font-semibold">
+            <td className="px-3 py-1.5 text-slate-800">Cobertura básica: R.C. Predios y Operaciones</td>
+            {cot.alternativas.map((a) => <td key={a.opcion} className="px-3 py-1.5 text-right tabular-nums whitespace-nowrap">{importe(a.limite)}</td>)}
+          </tr>
           {cot.coberturas.map((c) => (
             <tr key={c.nombre} className="border-t border-slate-100">
               <td className="px-3 py-1.5 text-slate-700">{c.nombre}</td>
