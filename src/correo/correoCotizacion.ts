@@ -28,7 +28,7 @@ export type PayloadCorreo = {
   to: string;
   toName?: string;
   template: 'branded';
-  data: { subject: string; eyebrow: string; title: string; intro: string; extraNote?: string };
+  data: { subject: string; eyebrow: string; title: string; intro: string; extraNote?: string; ctaLabel?: string; ctaUrl?: string };
   fields: CampoCorreo[];
   attachments: { filename: string; contentBase64: string; contentType: 'application/pdf' }[];
 };
@@ -134,7 +134,6 @@ export function armarPayloadPoliza(d: DatosCorreoPoliza): PayloadCorreo {
     { label: 'Producto', value: d.producto },
     ...(d.prima ? [{ label: 'Prima total', value: d.prima }] : []),
     ...(d.cnrecibo ? [{ label: 'Recibo', value: d.cnrecibo }] : []),
-    ...(d.urlpoliza ? [{ label: 'Ver póliza', value: d.urlpoliza }] : []),
   ]
     .filter((f) => f.value.trim())
     .map((f) => ({ label: corta(f.label, MAX_LABEL), value: corta(f.value.trim(), MAX_VALUE) }));
@@ -149,6 +148,8 @@ export function armarPayloadPoliza(d: DatosCorreoPoliza): PayloadCorreo {
       intro: `${saludo} Le enviamos su póliza N.º ${d.cnpoliza} de ${d.producto} con el condicionado general y particular y los anexos `
         + 'de las coberturas contratadas. Ante cualquier duda, puede comunicarse con su asesor de seguros.',
       extraNote: 'Conserve este correo: el condicionado y los anexos forman parte integrante de su contrato de seguro.',
+      // Botón de la plantilla branded (no el enlace suelto en la tabla de datos).
+      ...(d.urlpoliza ? { ctaLabel: 'Ver mi póliza', ctaUrl: d.urlpoliza } : {}),
     },
     fields: campos,
     attachments: d.adjuntos.map((a) => ({
