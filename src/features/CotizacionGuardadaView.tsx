@@ -53,7 +53,7 @@ function BuscarCodigo() {
     <div className="space-y-5">
       <SectionCard title="Trae tu cotización" description="Escribe el código que recibiste al cotizar (también está en el PDF y en el correo)." Icon={Search}>
         <form className="grid sm:grid-cols-[1fr_auto] gap-3 items-start" onSubmit={(e) => { e.preventDefault(); buscar(); }}>
-          <Field label="Código de cotización" error={intento && !valido ? 'El código tiene esta forma: RCG-2026-000123-7KQ4.' : undefined}>
+          <Field label="Código de cotización" error={intento && !valido ? (/-Pd{6}$/i.test(codigo.trim()) ? 'Ese número es provisional: esa cotización no quedó guardada y no se puede traer. Pide una cotización nueva.' : 'El código tiene esta forma: RCG-2026-000123-7KQ4.') : undefined}>
             <Input value={codigo} maxLength={24} autoFocus placeholder="RCG-2026-000123-7KQ4" className="uppercase tabular-nums"
               onChange={(e) => setCodigo(e.target.value.toUpperCase().replace(/\s+/g, ''))} />
           </Field>
