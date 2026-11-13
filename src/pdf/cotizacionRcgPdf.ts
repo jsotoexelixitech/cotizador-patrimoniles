@@ -477,7 +477,9 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
       const copiadas = await doc.copyPages(src, src.getPageIndices());
       copiadas.forEach((pg) => doc.addPage(pg));
     }
-    constanciaRecepcion(doc, d, a.condicionados.map((x) => x.titulo), regular, bold, logo);
+    constanciaRecepcion(doc, d, a.condicionados.map((x) => x.titulo), regular, bold, logo, {
+      encabezado: `Cotización ${d.numero}`, pie: 'Constancia de recepción - forma parte de la cotización.',
+    });
   }
 
   doc.setTitle(`Cotización ${plan ? plan.cplan : 'RCG'} ${d.numero} - ${limpiar(d.asegurado)}`);
@@ -487,7 +489,10 @@ export async function generarPdfRcg(d: DatosPdfRcg, a: AssetsPdfRcg): Promise<Ui
 }
 
 /** Página "Constancia de recepción": el tomador/asegurado firma que recibió condiciones generales, particulares y anexos. */
-function constanciaRecepcion(doc: PDFDocument, d: DatosPdfRcg, titulos: string[], regular: PDFFont, bold: PDFFont, logo: PDFImage) {
+function constanciaRecepcion(
+  doc: PDFDocument, d: Pick<DatosPdfRcg, 'asegurado' | 'rif' | 'fecha'>, titulos: string[], regular: PDFFont, bold: PDFFont, logo: PDFImage,
+  ref: { encabezado: string; pie: string },
+) {
   const p = doc.addPage([W, H]);
   const esc = 110 / logo.width;
   p.drawImage(logo, { x: L, y: H - 32 - logo.height * esc, width: 110, height: logo.height * esc });
@@ -507,7 +512,7 @@ function constanciaRecepcion(doc: PDFDocument, d: DatosPdfRcg, titulos: string[]
   };
   linea('CONSTANCIA DE RECEPCIÓN DE CONDICIONES GENERALES, PARTICULARES Y ANEXOS', 12, bold, C.navy);
   y -= 6;
-  linea(`Cotización ${d.numero} · Responsabilidad Civil General · ${fechaCorta(d.fecha)}`, 9, regular, C.gris);
+  linea(`${ref.encabezado} · Responsabilidad Civil General · ${fechaCorta(d.fecha)}`, 9, regular, C.gris);
   y -= 10;
   linea(`Yo, ${d.asegurado}, titular de la C.I./RIF ${d.rif}, en mi condición de tomador/asegurado, declaro que he recibido de `
     + 'La Mundial de Seguros, C.A. y he leído, en formato digital, las Condiciones Generales y Particulares de la póliza de '
@@ -531,7 +536,37 @@ function constanciaRecepcion(doc: PDFDocument, d: DatosPdfRcg, titulos: string[]
   campo('Fecha', L + 320, CW - 320);
   y -= 50;
   campo('Por La Mundial de Seguros, C.A. (firma y sello)', L, 300);
-  p.drawText('Constancia de recepción - forma parte de la cotización.', { x: L, y: 30, size: 7, font: regular, color: C.gris });
+  p.drawText(ref.pie, { x: L, y: 30, size: 7, font: regular, color: C.gris });
+}
+
+/**
+ * Condicionado y anexos de la PÓLIZA emitida (ya no van en la cotización): los PDF de los condicionados en orden y al final
+ * la constancia de recepción con el número de póliza. Es lo que se adjunta al correo de la póliza.
+ */
+export async function generarPdfAnexosPoliza(
+  d: { cnpoliza: string; asegurado: string; rif: string; fecha: Date }, condicionados: CondicionadoPdf[], logoJpg: Uint8Array,
+): Promise<Uint8Array> {
+  const doc = await PDFDocument.create();
+  const regular = await doc.embedFont(StandardFonts.Helvetica);
+  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
+  const logo = await doc.embedJpg(logoJpg);
+  for (const cnd of condicionados) {
+    const src = await PDFDocument.load(cnd.bytes, { ignoreEncryption: true });
+    const copiadas = await doc.copyPages(src, src.getPageIndices());
+    copiadas.forEach((pg) => doc.addPage(pg));
+  }
+  constanciaRecepcion(doc, d, condicionados.map((x) => x.titulo), regular, bold, logo, {
+    encabezado: `Póliza ${d.cnpoliza}`, pie: 'Constancia de recepción - forma parte de la póliza.',
+  });
+  doc.setTitle(`Condicionado y anexos - Póliza ${d.cnpoliza} - ${limpiar(d.asegurado)}`);
+  doc.setAuthor('La Mundial de Seguros, C.A.');
+  return doc.save();
+}
+
+/** Solo el logo (PDF de anexos de la póliza). */
+export async function cargarLogoRcg(): Promise<Uint8Array> {
+  const m = await import('./assets/logo-la-mundial.jpg?url');
+  return new Uint8Array(await (await fetch(m.default)).arrayBuffer());
 }
 
 /** Carga logo, sello y plantilla de la solicitud empaquetados por Vite. */

@@ -103,9 +103,67 @@ export function armarPayloadCorreo(d: DatosCorreoCotizacion): PayloadCorreo {
   };
 }
 
+export type DatosCorreoPoliza = {
+  correo: string;
+  nombre: string;
+  cnpoliza: string;
+  cnrecibo?: string;
+  producto: string;
+  prima?: string;
+  /** Enlace al PDF de la póliza (Sis2000); va como dato del correo. */
+  urlpoliza?: string;
+  /** PDF de la póliza (si se pudo descargar) y el condicionado con sus anexos. */
+  adjuntos: { pdf: Uint8Array; nombreArchivo: string }[];
+};
+
+export const asuntoPoliza = (cnpoliza: string) => `La Mundial de Seguros | Póliza N.º ${cnpoliza}`;
+
+/** Correo de la póliza emitida: datos de la póliza + condicionado y anexos (y la póliza si se pudo descargar) adjuntos. */
+export function armarPayloadPoliza(d: DatosCorreoPoliza): PayloadCorreo {
+  const to = d.correo.trim().toLowerCase();
+  if (!correoValido(to)) throw new Error('Indica un correo electrónico válido.');
+  if (!d.adjuntos.length && !d.urlpoliza) throw new Error('No hay póliza ni anexos para enviar.');
+  const total = d.adjuntos.reduce((s, a) => s + a.pdf.length, 0);
+  if (total > MAX_ADJUNTO_BYTES) {
+    throw new Error(`Los adjuntos pesan ${tamanoLegible(total)} y el correo admite hasta ${tamanoLegible(MAX_ADJUNTO_BYTES)}. Descárgalos y envíalos por otro medio.`);
+  }
+  const nombre = d.nombre.trim();
+  const saludo = nombre ? `Estimado(a) ${nombre}:` : 'Estimado(a) cliente:';
+  const campos: CampoCorreo[] = [
+    { label: 'Póliza', value: d.cnpoliza },
+    { label: 'Producto', value: d.producto },
+    ...(d.prima ? [{ label: 'Prima total', value: d.prima }] : []),
+    ...(d.cnrecibo ? [{ label: 'Recibo', value: d.cnrecibo }] : []),
+    ...(d.urlpoliza ? [{ label: 'Ver póliza', value: d.urlpoliza }] : []),
+  ]
+    .filter((f) => f.value.trim())
+    .map((f) => ({ label: corta(f.label, MAX_LABEL), value: corta(f.value.trim(), MAX_VALUE) }));
+  return {
+    to,
+    ...(nombre ? { toName: corta(nombre, MAX_TO_NAME) } : {}),
+    template: 'branded',
+    data: {
+      subject: asuntoPoliza(d.cnpoliza),
+      eyebrow: 'Póliza',
+      title: 'Su póliza de La Mundial de Seguros',
+      intro: `${saludo} Le enviamos su póliza N.º ${d.cnpoliza} de ${d.producto} con el condicionado general y particular y los anexos `
+        + 'de las coberturas contratadas. Ante cualquier duda, puede comunicarse con su asesor de seguros.',
+      extraNote: 'Conserve este correo: el condicionado y los anexos forman parte integrante de su contrato de seguro.',
+    },
+    fields: campos,
+    attachments: d.adjuntos.map((a) => ({
+      filename: corta(a.nombreArchivo.toLowerCase().endsWith('.pdf') ? a.nombreArchivo : `${a.nombreArchivo}.pdf`, MAX_FILENAME),
+      contentBase64: aBase64(a.pdf), contentType: 'application/pdf' as const,
+    })),
+  };
+}
+
 /** Traduce la respuesta de nest-api (HTTP 200 con success=false también es fallo) a un mensaje para el usuario. */
 export function mensajeErrorCorreo(status: number, data: unknown): string | null {
-  const o = (data && typeof data === 'object' ? data : {}) as { success?: unknown; sent?: unknown; mode?: unknown; error?: unknown; message?: unknown };
+  // nest-api envuelve las respuestas 2xx en { status: true, data: { success, sent, … } } (ResponseInterceptor).
+  const crudo = (data && typeof data === 'object' ? data : {}) as { status?: unknown; data?: unknown };
+  const sobre = crudo.status === true && crudo.data && typeof crudo.data === 'object' ? crudo.data : crudo;
+  const o = sobre as { success?: unknown; sent?: unknown; mode?: unknown; error?: unknown; message?: unknown };
   const msg = Array.isArray(o.message) ? o.message.join(' ') : typeof o.message === 'string' ? o.message : '';
   if (status >= 200 && status < 300) {
     if (o.success === true || o.sent === true) return null;

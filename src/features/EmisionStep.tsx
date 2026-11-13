@@ -169,11 +169,9 @@ export function EmisionStep() {
   const generarRcg = async (): Promise<PdfCotizacion> => {
     {
       // pdf-lib y las imágenes de la solicitud se cargan solo al generar el PDF.
+      // El condicionado y los anexos ya no van en la cotización: se entregan con la póliza (PolizaEmitida).
       const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
-      const { cargarCondicionados, documentosRcg } = await import('../pdf/condicionadosRcg');
-      const docs = documentosRcg(cotRcg.coberturas.map((x) => x.nombre), s.rcg.moneda);
       const assets = await cargarAssetsRcg();
-      assets.condicionados = await cargarCondicionados(docs);
       const bytes = await generarPdfRcg({
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: s.rcg.moneda,
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
@@ -183,7 +181,7 @@ export function EmisionStep() {
       }, assets);
       return {
         bytes, nombre: `Cotizacion_LaMundial_${c.asegurado.trim().replace(/\s+/g, '_') || 'RCG'}.pdf`,
-        detalle: `${numero} · cotización + Solicitud de Seguro + condicionado, ${docs.length - 1} anexos y constancia de recepción.`,
+        detalle: `${numero} · cotización + Solicitud de Seguro.`,
         producto: 'Responsabilidad Civil General',
       };
     }
@@ -198,7 +196,6 @@ export function EmisionStep() {
     {
       const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
       const assets = await cargarAssetsRcg();
-      if (docsSis2000.length) assets.condicionados = await (await import('../pdf/condicionadosRcg')).cargarCondicionados(docsSis2000);
       const bytes = await generarPdfRcg({
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda: 'USD',
         indole: s.rcg.indole, actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
@@ -215,7 +212,7 @@ export function EmisionStep() {
       }, assets);
       return {
         bytes, nombre: `Cotizacion_LaMundial_${plan.cplan}_${c.asegurado.trim().replace(/\s+/g, '_') || 'plan'}.pdf`,
-        detalle: `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`,
+        detalle: `${numero} · ${plan.nombre}${esRcg ? ' + Solicitud de Seguro' : ''}.`,
         producto: `${plan.nombre} (${ramo})`,
       };
     }
@@ -228,7 +225,6 @@ export function EmisionStep() {
     {
       const { cargarAssetsRcg, generarPdfRcg } = await import('../pdf/cotizacionRcgPdf');
       const assets = await cargarAssetsRcg();
-      if (docsSis2000.length) assets.condicionados = await (await import('../pdf/condicionadosRcg')).cargarCondicionados(docsSis2000);
       const bytes = await generarPdfRcg({
         numero, fecha: new Date(), asegurado: c.asegurado, rif: rifCompleto(c), moneda,
         indole: '', actividadEspecifica: s.rcg.actividadEspecifica, correo: c.correo, intermediario: c.intermediario,
@@ -241,7 +237,7 @@ export function EmisionStep() {
       }, assets);
       return {
         bytes, nombre: `Cotizacion_LaMundial_Combo_${cramo}_${c.asegurado.trim().replace(/\s+/g, '_') || 'combo'}.pdf`,
-        detalle: `${numero} · combo de ${xramoCombo}${docsSis2000.length ? ` + condicionado, ${docsSis2000.length - 1} anexos y constancia de recepción` : ''}.`,
+        detalle: `${numero} · combo de ${xramoCombo}.`,
         producto: `combo de coberturas de ${xramoCombo}`,
       };
     }
@@ -288,11 +284,10 @@ export function EmisionStep() {
 
       {rcg ? <ResumenRcg /> : planes ? <ResumenPlan /> : combo ? <ResumenCombo /> : <ResumenRc />}
 
-      {rcg && <CondicionadosRcg coberturas={cotRcg.coberturas.map((x) => x.nombre)} moneda={s.rcg.moneda} />}
-      {(planes || combo) && docsSis2000.length > 0 && <CondicionadosRcg docs={docsSis2000} />}
-
+      {/* Condicionado y anexos: no van en la cotización; se muestran y se envían con la póliza emitida (PolizaEmitida). */}
       {/* Vista cliente: solo cotiza; la emisión la hace el canal (nunca se emite sin pago). */}
-      {!MODO_CLIENTE && (planes ? <EmitirPlan /> : combo ? <EmitirCombo numero={numero} /> : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />)}
+      {!MODO_CLIENTE && (planes ? <EmitirPlan docs={docsSis2000} /> : combo ? <EmitirCombo numero={numero} docs={docsSis2000} />
+        : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />)}
 
       <p className="text-[0.72rem] text-slate-500">
         Cotización válida por {rcg || combo ? vigenciaDias : 15} días continuos. No constituye emisión de póliza ni activación de cobertura.
@@ -337,13 +332,14 @@ export function EmisionStep() {
   );
 }
 
-/** Minuta La Mundial 30-oct-2026: condicionado general y particular + anexos de las coberturas contratadas, incluidos en el PDF. */
-function CondicionadosRcg(p: { coberturas: string[]; moneda: string } | { docs: DocumentoRcg[] }) {
-  // RCG: por nombre de cobertura. Planes de Sis2000 y combo (ramo 28): lista ya resuelta por ccober/nombre.
-  const docs = 'docs' in p ? p.docs : documentosRcg(p.coberturas, p.moneda);
+/**
+ * Minuta La Mundial 30-oct-2026: condicionado general y particular + anexos de las coberturas contratadas. Se entregan con
+ * la póliza emitida (no con la cotización), junto con la constancia de recepción.
+ */
+function CondicionadosRcg({ docs }: { docs: DocumentoRcg[] }) {
   return (
-    <SectionCard title="Condicionados y anexos" Icon={FileText} statusLabel={`${docs.length} documentos`} statusTone="success"
-      description="Se incluyen en el PDF de la cotización junto con la constancia de recepción que firma el tomador/asegurado.">
+    <SectionCard title="Condicionados y anexos de la póliza" Icon={FileText} statusLabel={`${docs.length} documentos`} statusTone="success"
+      description="Forman parte de la póliza: se envían por correo al tomador con la constancia de recepción que firma.">
       <ul className="divide-y divide-slate-100">
         {docs.map((d, i) => (
           <li key={d.id} className="flex items-center justify-between gap-3 py-1.5 text-[0.8rem] text-slate-700">
@@ -395,7 +391,7 @@ function ResumenPlan() {
 }
 
 /** Emisión del plan por el partner patrimonial (mismo flujo que Emisión). Solo QA y con VITE_RCG_PLANES_EMITIR=1. */
-function EmitirPlan() {
+function EmitirPlan({ docs }: { docs: DocumentoRcg[] }) {
   const s = useCotizacionStore();
   const prm = useParametrosStore((p) => p.rcg);
   const { planes, emitiendo, emision, error, emitir } = usePlanesStore();
@@ -438,7 +434,7 @@ function EmitirPlan() {
     if (r) toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);
   };
 
-  if (emision) return <PolizaEmitida emision={emision} prima={plan ? `USD ${importe(cobCot ? cobCot.cot.prima_total : plan.prima)}` : undefined} />;
+  if (emision) return <PolizaEmitida emision={emision} prima={plan ? `USD ${importe(cobCot ? cobCot.cot.prima_total : plan.prima)}` : undefined} docs={docs} producto={plan?.nombre} />;
 
   return (
     <SectionCard title="Emitir en Sis2000 QA" description={cobCot ? 'Cobertura por cobertura (nest-api riesgos-generales/emision).' : 'Partner patrimonial de nest-api (el mismo de Emisión).'} Icon={habilitada ? FileCheck2 : Lock}
@@ -469,21 +465,128 @@ function EmitirPlan() {
   );
 }
 
-/** `prima`: prima total ya formateada con su moneda (la misma que se mandó a emitir). */
-function PolizaEmitida({ emision, prima }: { emision: ResultadoEmision; prima?: string }) {
+/**
+ * `prima`: prima total ya formateada con su moneda (la misma que se mandó a emitir). `docs`: condicionado y anexos de las
+ * coberturas (ramo 28); se muestran aquí y se envían por correo con la póliza.
+ */
+function PolizaEmitida({ emision, prima, docs = [], producto = 'Responsabilidad Civil' }: {
+  emision: ResultadoEmision; prima?: string; docs?: DocumentoRcg[]; producto?: string;
+}) {
   return (
-    <SectionCard title="Póliza emitida en Sis2000 QA" Icon={FileCheck2} statusLabel="Emitida" statusTone="success">
-      <div className="grid sm:grid-cols-4 gap-4">
-        <Dato label="N.º de póliza">{emision.cnpoliza}</Dato>
-        <Dato label="Prima total">{prima}</Dato>
-        <Dato label="N.º de recibo">{emision.cnrecibo}</Dato>
-        <Dato label="Documento">
-          {emision.urlpoliza
-            ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={emision.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a>
-            : '—'}
-        </Dato>
+    <>
+      <SectionCard title="Póliza emitida en Sis2000 QA" Icon={FileCheck2} statusLabel="Emitida" statusTone="success">
+        <div className="grid sm:grid-cols-4 gap-4">
+          <Dato label="N.º de póliza">{emision.cnpoliza}</Dato>
+          <Dato label="Prima total">{prima}</Dato>
+          <Dato label="N.º de recibo">{emision.cnrecibo}</Dato>
+          <Dato label="Documento">
+            {emision.urlpoliza
+              ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={emision.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a>
+              : '—'}
+          </Dato>
+        </div>
+        <p className="text-[0.72rem] text-slate-500 mt-3">Recibo pendiente de cobro en Sis2000.</p>
+      </SectionCard>
+      {docs.length > 0 && <CondicionadosRcg docs={docs} />}
+      <EnviarPolizaCorreo emision={emision} prima={prima} docs={docs} producto={producto} />
+    </>
+  );
+}
+
+/** PDF de la póliza desde Sis2000; si el servidor no lo deja descargar (CORS, tiempo), el correo lleva solo el enlace. */
+async function descargarPdfPoliza(url: string): Promise<Uint8Array | null> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    const res = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) return null;
+    const b = new Uint8Array(await res.arrayBuffer());
+    // %PDF
+    return b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 ? b : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Correo de la póliza al tomador: póliza (PDF o enlace) + condicionado y anexos con la constancia. Admin decide y confirma. */
+function EnviarPolizaCorreo({ emision, prima, docs, producto }: { emision: ResultadoEmision; prima?: string; docs: DocumentoRcg[]; producto: string }) {
+  const c = useCotizacionStore((x) => x.comun);
+  const [correo, setCorreo] = useState(c.correo.trim());
+  const [estado, setEstado] = useState<EstadoEnvio>('editando');
+  const [mensaje, setMensaje] = useState('');
+  const valido = correoValido(correo);
+  const ocupado = estado === 'enviando';
+
+  const enviar = async () => {
+    setEstado('enviando');
+    try {
+      const adjuntos: { pdf: Uint8Array; nombreArchivo: string }[] = [];
+      let sinPdfPoliza = false;
+      if (emision.urlpoliza) {
+        setMensaje('Descargando la póliza…');
+        const pdf = await descargarPdfPoliza(emision.urlpoliza);
+        if (pdf) adjuntos.push({ pdf, nombreArchivo: `Poliza_${emision.cnpoliza}.pdf` });
+        else sinPdfPoliza = true;
+      }
+      if (docs.length) {
+        setMensaje('Armando el condicionado y los anexos…');
+        const { cargarCondicionados } = await import('../pdf/condicionadosRcg');
+        const { cargarLogoRcg, generarPdfAnexosPoliza } = await import('../pdf/cotizacionRcgPdf');
+        const [condicionados, logo] = await Promise.all([cargarCondicionados(docs), cargarLogoRcg()]);
+        const pdf = await generarPdfAnexosPoliza({ cnpoliza: emision.cnpoliza, asegurado: c.asegurado, rif: rifCompleto(c), fecha: new Date() }, condicionados, logo);
+        adjuntos.push({ pdf, nombreArchivo: `Condicionado_y_anexos_${emision.cnpoliza}.pdf` });
+      }
+      setMensaje('Enviando…');
+      const { enviarPolizaPorCorreo } = await import('../api/correo');
+      await enviarPolizaPorCorreo({
+        correo, nombre: c.asegurado, cnpoliza: emision.cnpoliza, cnrecibo: emision.cnrecibo, producto, prima,
+        urlpoliza: emision.urlpoliza || undefined, adjuntos,
+      });
+      setEstado('enviado');
+      const que = [adjuntos.length ? `${adjuntos.length} adjunto${adjuntos.length > 1 ? 's' : ''}` : '', sinPdfPoliza ? 'la póliza como enlace' : ''].filter(Boolean).join(' y ');
+      setMensaje(`Póliza ${emision.cnpoliza} enviada a ${correo.trim().toLowerCase()}${que ? ` (${que})` : ''}.`);
+      toast.success('Póliza enviada por correo', `${emision.cnpoliza} → ${correo.trim().toLowerCase()}`);
+    } catch (e) {
+      setEstado('error');
+      setMensaje(e instanceof Error ? e.message : String(e));
+      toast.error('No se pudo enviar la póliza', e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <SectionCard title="Enviar póliza y anexos por correo" Icon={Mail} statusLabel={estado === 'enviado' ? 'Enviada' : undefined} statusTone="success"
+      description={docs.length ? 'Póliza + condicionado general y particular, anexos de las coberturas y constancia de recepción.' : 'Póliza emitida (este ramo no tiene anexos de cobertura cargados).'}>
+      <div className="grid sm:grid-cols-2 gap-4 items-start">
+        <Field label="Correo del tomador" error={correo && !valido ? 'Introduce un correo electrónico válido.' : undefined}
+          hint="Precargado con el correo del tomador; puedes cambiarlo.">
+          <Input type="email" value={correo} maxLength={150} disabled={ocupado}
+            onChange={(e) => { setCorreo(e.target.value); if (!ocupado) setEstado('editando'); }} placeholder="correo@empresa.com" />
+        </Field>
+        <div className="flex flex-wrap gap-2 sm:pt-7">
+          {estado === 'confirmando' ? (
+            <>
+              <Button variant="primary" onClick={() => void enviar()}><Send size={14} /> Sí, enviar</Button>
+              <Button variant="ghost" onClick={() => setEstado('editando')}>Cancelar</Button>
+            </>
+          ) : (
+            <Button variant="primary" disabled={!valido || ocupado} onClick={() => setEstado('confirmando')}>
+              {ocupado ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {ocupado ? 'Enviando…' : estado === 'enviado' ? 'Enviar de nuevo' : 'Enviar póliza y anexos'}
+            </Button>
+          )}
+        </div>
       </div>
-      <p className="text-[0.72rem] text-slate-500 mt-3">Recibo pendiente de cobro en Sis2000.</p>
+      {estado === 'confirmando' && (
+        <p className="mt-3 text-[0.8rem] text-slate-700">
+          ¿Enviar la póliza <strong>{emision.cnpoliza}</strong>{docs.length ? ` con ${docs.length} documentos (condicionado y anexos)` : ''} a <strong>{correo.trim().toLowerCase()}</strong>?
+        </p>
+      )}
+      {mensaje && estado !== 'editando' && estado !== 'confirmando' && (
+        estado === 'error'
+          ? <div className="mt-3"><Aviso tono="error">{mensaje}</Aviso></div>
+          : <p className={`mt-3 text-[0.8rem] ${estado === 'enviado' ? 'text-emerald-700 font-semibold' : 'text-slate-600'}`}>{mensaje}</p>
+      )}
     </SectionCard>
   );
 }
@@ -492,7 +595,7 @@ function PolizaEmitida({ emision, prima }: { emision: ResultadoEmision; prima?: 
  * Combo: se emite con un plan vigente del ramo como contenedor (moneda, cplan y regla de duplicados de Sis2000) y las
  * coberturas y sumas elegidas (nest-api riesgos-generales/emision, modo combo). Solo QA y con VITE_RCG_PLANES_EMITIR=1.
  */
-function EmitirCombo({ numero }: { numero: string }) {
+function EmitirCombo({ numero, docs }: { numero: string; docs: DocumentoRcg[] }) {
   const s = useCotizacionStore();
   const setComun = useCotizacionStore((x) => x.setComun);
   const r = useCotizacionCombo();
@@ -520,7 +623,7 @@ function EmitirCombo({ numero }: { numero: string }) {
   const unico = planesRamo.length === 1 ? planesRamo[0].cplan : '';
   useEffect(() => { setCplan(unico); }, [cramo, unico]);
 
-  if (emision) return <PolizaEmitida emision={emision} prima={r ? `${r.moneda} ${importe(r.cot.prima_total)}` : undefined} />;
+  if (emision) return <PolizaEmitida emision={emision} prima={r ? `${r.moneda} ${importe(r.cot.prima_total)}` : undefined} docs={docs} producto={`combo de coberturas de ${xramo}`} />;
   if (!r) return null;
 
   const emitirAhora = async () => {
@@ -700,7 +803,8 @@ function EmitirRcg({ numero }: { numero: string }) {
     <EmitirInformada titulo={`Emitir RCG en Sis2000 QA${opcion ? ` · opción ${opcion}` : ''}`} emision={emision}
       valida={!Object.keys(cot.errores).length && !!emision} ncotizacion={numero} moneda={rcg.moneda}
       sugerido={opcion ? PLAN_RCG_POR_OPCION[opcion] : undefined}
-      bien={[rcg.indole, rcg.actividadEspecifica].filter(Boolean).join(' · ')} />
+      bien={[rcg.indole, rcg.actividadEspecifica].filter(Boolean).join(' · ')}
+      docs={documentosRcg(cot.coberturas.map((x) => x.nombre), rcg.moneda)} producto="Responsabilidad Civil General" />
   );
 }
 
@@ -717,7 +821,7 @@ function EmitirRcpRce({ numero }: { numero: string }) {
         return (
           <EmitirInformada key={r.k} titulo={`Emitir ${NOMBRES[r.k]} en Sis2000 QA${r.opcion ? ` · opción ${r.opcion}` : ''}`}
             emision={emision} valida={!cot.errores.length} ncotizacion={numero.replace(/^RCG/, cotizador.toUpperCase())}
-            moneda={cot.simbolo} bien={[rc.indole, r.riesgo?.[0]].filter(Boolean).join(' · ')} />
+            moneda={cot.simbolo} bien={[rc.indole, r.riesgo?.[0]].filter(Boolean).join(' · ')} producto={NOMBRES[r.k]} />
         );
       })}
     </>
@@ -728,8 +832,10 @@ function EmitirRcpRce({ numero }: { numero: string }) {
  * Emisión con la prima del cotizador (nest-api riesgos-generales/emision, modo cotizador): Sis2000 no tiene tarifa en
  * estos ramos, la aplica Técnico. Solo QA y con VITE_RC_EMITIR=1. Las coberturas salen de tarifas/data/mapeo-sis2000.ts.
  */
-function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerido, bien }: {
+function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerido, bien, docs = [], producto }: {
   titulo: string; emision: CoberturasEmision | null; valida: boolean; ncotizacion: string; moneda: string; sugerido?: string; bien: string;
+  /** Condicionado y anexos que acompañan a la póliza (RCG). */
+  docs?: DocumentoRcg[]; producto?: string;
 }) {
   const c = useCotizacionStore((x) => x.comun);
   const setComun = useCotizacionStore((x) => x.setComun);
@@ -756,7 +862,7 @@ function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerid
   const preferido = planesRamo.find((p) => p.cplan === sugerido)?.cplan ?? (planesRamo.length === 1 ? planesRamo[0].cplan : '');
   useEffect(() => { setCplan(preferido); }, [cramo, preferido]);
 
-  if (resultado) return <PolizaEmitida emision={resultado} prima={emision ? `${moneda} ${importe(emision.primaTotal)}` : undefined} />;
+  if (resultado) return <PolizaEmitida emision={resultado} prima={emision ? `${moneda} ${importe(emision.primaTotal)}` : undefined} docs={docs} producto={producto} />;
 
   const faltan = [
     ...(catalogo?.error ? [`No se pudieron verificar las coberturas del ramo en Sis2000: ${catalogo.error}`] : []),

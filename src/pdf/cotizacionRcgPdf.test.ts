@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { PDFDocument } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 import { PARAMETROS_RCG, cotizarRcg } from '../tarifas/rcg';
-import { generarPdfRcg } from './cotizacionRcgPdf';
+import { generarPdfAnexosPoliza, generarPdfRcg } from './cotizacionRcgPdf';
 import { ANEXOS_RCG, CONDICIONADO_GENERAL, documentosRcg } from './condicionadosRcg';
 
 const dir = join(__dirname, 'assets');
@@ -102,5 +102,20 @@ describe('PDF de cotización RCG', () => {
     }, assets);
     if (process.env.PDF_SALIDA_COMBO) writeFileSync(process.env.PDF_SALIDA_COMBO, bytes);
     expect((await PDFDocument.load(bytes)).getPageCount()).toBe(2);
+  });
+});
+
+describe('PDF de condicionado y anexos de la póliza', () => {
+  it('une el condicionado y los anexos y agrega la constancia con el número de póliza', async () => {
+    const docs = documentosRcg(['Riesgo de Vecinos'], 'USD');
+    const condicionados = docs.map((d) => ({ titulo: d.titulo, bytes: leer(join('condicionados', d.archivo)) }));
+    let paginas = 0;
+    for (const c of condicionados) paginas += (await PDFDocument.load(c.bytes, { ignoreEncryption: true })).getPageCount();
+    const bytes = await generarPdfAnexosPoliza(
+      { cnpoliza: '28-1-0000123', asegurado: 'Comercial Prueba, C.A.', rif: 'J-1837137', fecha: new Date(2026, 10, 13) }, condicionados, assets.logo,
+    );
+    const pdf = await PDFDocument.load(bytes);
+    expect(pdf.getPageCount()).toBe(paginas + 1);
+    expect(pdf.getTitle()).toContain('Póliza 28-1-0000123');
   });
 });

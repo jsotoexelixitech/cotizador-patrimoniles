@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  MAX_ADJUNTO_BYTES, aBase64, armarPayloadCorreo, asuntoCotizacion, correoValido, errorTamanoPdf, mensajeErrorCorreo,
+  MAX_ADJUNTO_BYTES, aBase64, armarPayloadPoliza, armarPayloadCorreo, asuntoCotizacion, correoValido, errorTamanoPdf, mensajeErrorCorreo,
 } from './correoCotizacion';
 
 const pdf = new TextEncoder().encode('%PDF-1.7 prueba');
@@ -65,11 +65,34 @@ describe('correo de la cotización', () => {
   it('interpreta la respuesta de nest-api', () => {
     expect(mensajeErrorCorreo(200, { success: true, sent: true, mode: 'smtp' })).toBeNull();
     expect(mensajeErrorCorreo(200, { success: false, sent: false, mode: 'disabled' })).toMatch(/MAIL_ENABLED/);
+    // Respuesta real de nest-api: envuelta por ResponseInterceptor.
+    expect(mensajeErrorCorreo(200, { status: true, data: { success: true, sent: true, mode: 'smtp' } })).toBeNull();
+    expect(mensajeErrorCorreo(200, { status: true, data: { success: false, sent: false, mode: 'smtp', error: 'SMTP caído' } })).toMatch(/SMTP caído/);
     expect(mensajeErrorCorreo(200, { success: false, sent: false, mode: 'smtp', error: 'timeout' })).toMatch(/timeout/);
     expect(mensajeErrorCorreo(403, { message: 'Permiso requerido: emissions:auto.' })).toMatch(/emissions:auto/);
     expect(mensajeErrorCorreo(400, { message: ['to must be an email'] })).toBe('to must be an email');
     expect(mensajeErrorCorreo(413, null)).toMatch(/demasiado grande/);
     expect(mensajeErrorCorreo(404, null)).toMatch(/no disponible/);
     expect(mensajeErrorCorreo(0, null)).toMatch(/Sin conexión/);
+  });
+});
+
+describe('armarPayloadPoliza', () => {
+  const pdf = new Uint8Array([0x25, 0x50, 0x44, 0x46, 1, 2, 3]);
+  it('arma el correo de la póliza con la póliza y los anexos adjuntos', () => {
+    const p = armarPayloadPoliza({
+      correo: ' Cliente@Empresa.com ', nombre: 'Comercial X', cnpoliza: '28-1-000123', cnrecibo: '99', producto: 'Responsabilidad Civil General',
+      prima: 'USD 250,00', urlpoliza: 'https://x/poliza.pdf',
+      adjuntos: [{ pdf, nombreArchivo: 'Poliza_28-1-000123.pdf' }, { pdf, nombreArchivo: 'Condicionado_y_anexos' }],
+    });
+    expect(p.to).toBe('cliente@empresa.com');
+    expect(p.data.subject).toContain('Póliza N.º 28-1-000123');
+    expect(p.attachments.map((a) => a.filename)).toEqual(['Poliza_28-1-000123.pdf', 'Condicionado_y_anexos.pdf']);
+    expect(p.fields.find((f) => f.label === 'Prima total')?.value).toBe('USD 250,00');
+  });
+  it('rechaza adjuntos que superan el tope del correo', () => {
+    expect(() => armarPayloadPoliza({
+      correo: 'a@b.com', nombre: '', cnpoliza: '1', producto: 'RC', adjuntos: [{ pdf: new Uint8Array(MAX_ADJUNTO_BYTES + 1), nombreArchivo: 'x.pdf' }],
+    })).toThrow(/admite hasta/);
   });
 });
