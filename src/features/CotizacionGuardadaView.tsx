@@ -3,7 +3,7 @@ import {
   ArrowLeft, Check, Copy, CreditCard, Download, ExternalLink, FileCheck2, FileText, Loader2, MailCheck, Pencil, RefreshCw, Search, ShieldCheck, User,
 } from 'lucide-react';
 import {
-  crearCheckout, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, traerCotizacion, type Checkout, type CotizacionGuardada,
+  crearCheckout, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, traerCotizacion, type Checkout, type CotizacionGuardada, type PolizaDeCotizacion,
 } from '../api/cotizaciones';
 import { Aviso } from '../components/ui/Aviso';
 import { Badge } from '../components/ui/Badge';
@@ -12,6 +12,7 @@ import { Field, Input } from '../components/ui/FormField';
 import { SectionCard } from '../components/ui/SectionCard';
 import { MODO_CLIENTE } from '../config/modoCliente';
 import { EnviarPolizaCorreo } from './EmisionStep';
+import { nombrePoliza, polizasDe, polizasDeOpcion, todasCobradas } from '../cotizaciones/polizas';
 import { estadoParaReabrir, huellaCotizacion, type AlternativaGuardada, type DatosCotizacion, type Opcion } from '../cotizaciones/snapshot';
 import { MAX_ADJUNTO_BYTES, aBase64 } from '../correo/correoCotizacion';
 import { cn } from '../lib/utils';
@@ -247,8 +248,23 @@ function Cotizacion({ codigo }: { codigo: string }) {
   };
 
   const urlPago = checkout?.checkoutUrl ?? cot.pago?.checkoutUrl;
-  const cobrado = !!cot.poliza?.cobro?.ok;
+  // RCP + RCE son dos pólizas con un solo pago: todo lo de la póliza se muestra por cada una.
+  const polizas = polizasDe(cot.poliza);
+  const varias = polizas.length > 1;
+  const cobrado = todasCobradas(polizas);
   const correoEnviado = !!cot.correoPoliza?.enviadoEn;
+  const aPagar = polizasDeOpcion(d, elegida?.opcion ?? null);
+  const verPoliza = (p: PolizaDeCotizacion) => (p.urlpoliza
+    ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={p.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a> : '—');
+  const cobroDe = (p: PolizaDeCotizacion) => (
+    <>
+      {p.cobro?.ok
+        ? `Pago registrado${cot.pago?.referencia ? ` con la referencia ${cot.pago.referencia}` : ''}: el recibo quedó cobrado.`
+        : p.cobro?.pendiente ? 'Emitida por el canal: recibo pendiente de cobro en Sis2000.'
+          : admin ? `La póliza se emitió pero el cobro del recibo falló: ${p.cobro?.error ?? 'sin detalle'}.` : 'Tu pago está recibido; estamos terminando de registrar el recibo.'}
+      {admin && p.cobro?.ingresoCaja && <> <a className="text-indigo-600 font-bold" href={p.cobro.ingresoCaja} target="_blank" rel="noreferrer">Ingreso de caja</a></>}
+    </>
+  );
 
   return (
     <div className="space-y-5">
@@ -270,7 +286,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
       {d.mesaTecnica && <Aviso><strong>Sujeta a aprobación de la mesa técnica.</strong> Tu asesor de seguros te confirmará la cotización.</Aviso>}
 
       <SectionCard title={abierta ? 'Elige tu opción' : 'Opciones cotizadas'} Icon={ShieldCheck}
-        description={abierta ? 'Las tres opciones cubren lo mismo; cambia la suma asegurada y la prima anual.' : undefined}>
+        description={abierta && d.alternativas.length > 1 ? 'Las opciones cubren lo mismo; cambia la suma asegurada y la prima anual.' : undefined}>
         <div className="grid sm:grid-cols-3 gap-3">
           {d.alternativas.map((a) => (
             <TarjetaAlternativa key={a.opcion} a={a} moneda={d.moneda} activa={elegida?.opcion === a.opcion} elegible={abierta} tecnica={admin && vistaTecnica}
@@ -315,6 +331,18 @@ function Cotizacion({ codigo }: { codigo: string }) {
                 Opción <strong>{elegida!.opcion}</strong> · suma asegurada <strong>{m(elegida!.limite)}</strong> · prima anual <strong>{m(elegida!.prima)}</strong>.
                 {d.notaIgtf && ' El pago es en bolívares a la tasa oficial del BCV del día.'}
               </p>
+              {aPagar.length > 1 && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  <p className="font-bold text-slate-900">Son {aPagar.length} pólizas con un solo pago</p>
+                  <ul className="mt-1.5 space-y-0.5">
+                    {aPagar.map((p) => (
+                      <li key={p.cramo} className="flex justify-between gap-4"><span>{p.nombre}</span><span className="tabular-nums">{m(p.prima)}</span></li>
+                    ))}
+                    <li className="flex justify-between gap-4 border-t border-slate-200 pt-1 font-bold"><span>Total a pagar</span><span className="tabular-nums">{m(elegida!.prima)}</span></li>
+                  </ul>
+                  <p className="text-[0.72rem] text-slate-500 mt-1.5">Con el pago confirmado se emiten las {aPagar.length} pólizas y te llegan juntas en un solo correo.</p>
+                </div>
+              )}
               <label className="flex items-start gap-2 text-sm text-slate-700">
                 <input type="checkbox" className="mt-0.5 w-4 h-4 accent-indigo-600" checked={acepta} onChange={(e) => setAcepta(e.target.checked)} />
                 {admin ? 'El tomador aprobó esta opción, declara que la información es veraz y acepta los Términos y Condiciones.'
@@ -349,37 +377,58 @@ function Cotizacion({ codigo }: { codigo: string }) {
         <SectionCard title="Pago recibido" Icon={CreditCard} statusLabel="Pagada" statusTone="success">
           {cot.error
             ? <Aviso>{admin ? 'El pago está confirmado pero la emisión falló: revisa el log de nexus-api y reintenta.' : cot.error}</Aviso>
-            : <p className="flex items-center gap-2 text-sm text-slate-700"><Loader2 size={14} className="animate-spin" /> Recibimos tu pago{cot.pago?.referencia ? ` (referencia ${cot.pago.referencia})` : ''}. Estamos emitiendo la póliza…</p>}
-          {admin && cot.error && <div className="mt-3"><Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}><RefreshCw size={13} /> Reintentar la emisión</Button></div>}
+            : <p className="flex items-center gap-2 text-sm text-slate-700"><Loader2 size={14} className="animate-spin" /> Recibimos tu pago{cot.pago?.referencia ? ` (referencia ${cot.pago.referencia})` : ''}. Estamos emitiendo {aPagar.length > 1 ? 'las pólizas' : 'la póliza'}…</p>}
+          {/* Emisión a medias (RCP + RCE): lo que ya salió queda guardado y el reintento emite solo lo que falta. */}
+          {polizas.length > 0 && (
+            <ul className="mt-3 space-y-1 text-[0.8rem] text-slate-700">
+              {polizas.map((p) => (
+                <li key={p.cnpoliza} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <FileCheck2 size={13} className="text-emerald-600" /> <span>{nombrePoliza(p)}: póliza <strong>{p.cnpoliza}</strong> emitida{p.cobro?.ok ? ' y cobrada' : ''}.</span> {verPoliza(p)}
+                </li>
+              ))}
+              {aPagar.filter((x) => !polizas.some((p) => p.cramo === x.cramo)).map((x) => <li key={x.cramo} className="text-amber-700">{x.nombre}: falta por emitir.</li>)}
+            </ul>
+          )}
+          {admin && cot.error && <div className="mt-3"><Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}><RefreshCw size={13} /> {polizas.length ? 'Reintentar la póliza que falta' : 'Reintentar la emisión'}</Button></div>}
         </SectionCard>
       )}
 
-      {cot.estado === 'emitida' && cot.poliza && (
+      {cot.estado === 'emitida' && polizas.length > 0 && (
         <>
-          <SectionCard title="Póliza emitida" Icon={FileCheck2} statusLabel={cot.poliza.cobro?.ok ? 'Pagada' : 'Recibo pendiente'} statusTone={cot.poliza.cobro?.ok ? 'success' : 'warning'}>
-            <div className="grid sm:grid-cols-4 gap-4">
-              <Dato label="N.º de póliza">{cot.poliza.cnpoliza}</Dato>
-              <Dato label="Opción">{elegida ? `${elegida.opcion} · ${m(elegida.prima)}` : cot.opcion}</Dato>
-              <Dato label="N.º de recibo">{cot.poliza.cnrecibo}</Dato>
-              <Dato label="Documento">
-                {cot.poliza.urlpoliza
-                  ? <a className="text-indigo-600 font-bold inline-flex items-center gap-1" href={cot.poliza.urlpoliza} target="_blank" rel="noreferrer">Ver póliza <ExternalLink size={12} /></a> : '—'}
-              </Dato>
-            </div>
-            <p className="text-[0.72rem] text-slate-500 mt-3">
-              {cot.poliza.cobro?.ok
-                ? `Pago registrado${cot.pago?.referencia ? ` con la referencia ${cot.pago.referencia}` : ''}: el recibo quedó cobrado.`
-                : cot.poliza.cobro?.pendiente ? 'Emitida por el canal: recibo pendiente de cobro en Sis2000.'
-                  : admin ? `La póliza se emitió pero el cobro del recibo falló: ${cot.poliza.cobro?.error ?? 'sin detalle'}.` : 'Tu pago está recibido; estamos terminando de registrar el recibo.'}
-              {admin && cot.poliza.cobro?.ingresoCaja && <> <a className="text-indigo-600 font-bold" href={cot.poliza.cobro.ingresoCaja} target="_blank" rel="noreferrer">Ingreso de caja</a></>}
-            </p>
+          <SectionCard title={varias ? 'Pólizas emitidas' : 'Póliza emitida'} Icon={FileCheck2} statusLabel={cobrado ? 'Pagada' : 'Recibo pendiente'} statusTone={cobrado ? 'success' : 'warning'}>
+            {varias ? (
+              <div className="space-y-3">
+                {polizas.map((p) => (
+                  <div key={p.cnpoliza} className="rounded-xl border border-slate-200 p-3">
+                    <div className="grid sm:grid-cols-4 gap-4">
+                      <Dato label={nombrePoliza(p, 'Póliza')}>{p.cnpoliza}</Dato>
+                      <Dato label="Prima">{p.prima ? m(p.prima) : ''}</Dato>
+                      <Dato label="N.º de recibo">{p.cnrecibo}</Dato>
+                      <Dato label="Documento">{verPoliza(p)}</Dato>
+                    </div>
+                    <p className="text-[0.72rem] text-slate-500 mt-2">{cobroDe(p)}</p>
+                  </div>
+                ))}
+                {elegida && <p className="text-sm text-slate-700">Opción <strong>{elegida.opcion}</strong> · {polizas.length} pólizas · total <strong>{m(elegida.prima)}</strong>{cot.pago?.referencia ? ', con un solo pago' : ''}.</p>}
+              </div>
+            ) : (
+              <>
+                <div className="grid sm:grid-cols-4 gap-4">
+                  <Dato label="N.º de póliza">{polizas[0].cnpoliza}</Dato>
+                  <Dato label="Opción">{elegida ? `${elegida.opcion} · ${m(elegida.prima)}` : cot.opcion}</Dato>
+                  <Dato label="N.º de recibo">{polizas[0].cnrecibo}</Dato>
+                  <Dato label="Documento">{verPoliza(polizas[0])}</Dato>
+                </div>
+                <p className="text-[0.72rem] text-slate-500 mt-3">{cobroDe(polizas[0])}</p>
+              </>
+            )}
             {correoEnviado && (
               <p className="mt-3 flex items-center gap-1.5 text-[0.8rem] font-semibold text-emerald-700">
-                <MailCheck size={14} /> {admin ? 'Póliza enviada a' : 'Te enviamos la póliza a'} {cot.correoPoliza?.a ?? d.tomador.correo}{docs.length ? ', con el condicionado y los anexos' : ''}.
+                <MailCheck size={14} /> {admin ? (varias ? 'Pólizas enviadas a' : 'Póliza enviada a') : (varias ? 'Te enviamos las pólizas a' : 'Te enviamos la póliza a')} {cot.correoPoliza?.a ?? d.tomador.correo}{docs.length ? ', con el condicionado y los anexos' : ''}.
               </p>
             )}
             {!correoEnviado && esperaCorreo && (
-              <p className="mt-3 flex items-center gap-2 text-[0.8rem] text-slate-600"><Loader2 size={13} className="animate-spin" /> Enviando la póliza a {d.tomador.correo}…</p>
+              <p className="mt-3 flex items-center gap-2 text-[0.8rem] text-slate-600"><Loader2 size={13} className="animate-spin" /> Enviando {varias ? 'las pólizas' : 'la póliza'} a {d.tomador.correo}…</p>
             )}
             {admin && !correoEnviado && cot.correoPoliza?.error && (
               <div className="mt-3"><Aviso tono="error">El correo automático de la póliza no salió: {cot.correoPoliza.error}</Aviso></div>
@@ -388,7 +437,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
               <div className="mt-3">
                 <Button variant="secondary" size="sm" disabled={ocupado} onClick={() => void reintentar()}>
                   {ocupado ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                  {!cobrado ? 'Reintentar el cobro del recibo' : 'Reenviar el correo de la póliza'}
+                  {!cobrado ? (varias ? 'Reintentar el cobro de los recibos pendientes' : 'Reintentar el cobro del recibo') : 'Reenviar el correo de la póliza'}
                 </Button>
               </div>
             )}
@@ -405,11 +454,15 @@ function Cotizacion({ codigo }: { codigo: string }) {
               </ul>
             </SectionCard>
           )}
-          <EnviarPolizaCorreo
-            emision={{ cnpoliza: cot.poliza.cnpoliza, cnrecibo: cot.poliza.cnrecibo ?? '', urlpoliza: cot.poliza.urlpoliza ?? '' }}
-            prima={elegida ? m(elegida.prima) : undefined} docs={docs} producto={d.nombreProducto}
-            tomador={{ correo: d.tomador.correo, nombre: d.tomador.nombre, rif: d.tomador.rif }}
-            urlRecibo={cobrado ? cot.poliza.cobro?.ingresoCaja : null} />
+          {/* Envío manual: uno por póliza (el correo automático de Nexus lleva todas juntas). */}
+          {polizas.map((p) => (
+            <EnviarPolizaCorreo key={p.cnpoliza}
+              emision={{ cnpoliza: p.cnpoliza, cnrecibo: p.cnrecibo, urlpoliza: p.urlpoliza }}
+              prima={varias ? (p.prima ? m(p.prima) : undefined) : elegida ? m(elegida.prima) : undefined} docs={docs}
+              producto={varias ? nombrePoliza(p, d.nombreProducto) : d.nombreProducto}
+              tomador={{ correo: d.tomador.correo, nombre: d.tomador.nombre, rif: d.tomador.rif }}
+              urlRecibo={p.cobro?.ok ? p.cobro.ingresoCaja : null} />
+          ))}
         </>
       )}
 

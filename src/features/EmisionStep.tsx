@@ -170,22 +170,34 @@ export function EmisionStep() {
   useEffect(() => {
     if (!huella) return;
     void guardada.guardar(huella, async () => {
-      if (!rcg) return datosCotizacionRc(s, cotRc, { vigenciaDias: 15 });
-      // Coberturas y planes del ramo 28 en Sis2000: con ellos queda armada la emisión de cada opción para el pago en línea.
-      const cramo = RAMOS_RC.rcg;
-      void usePlanesStore.getState().cargarCatalogo(cramo);
+      // Coberturas y planes de Sis2000 de cada ramo (RCG: 28; RCP: 27; RCE: 37): con ellos queda armada la emisión de
+      // cada opción para el pago en línea.
+      const ramosEmision = rcg ? [RAMOS_RC.rcg] : cotRc.resultados.map((r) => RAMOS_RC[r.k === 'p' ? 'rcp' : 'rce']);
+      for (const r of ramosEmision) void usePlanesStore.getState().cargarCatalogo(r);
       void usePlanesStore.getState().cargarContenedores();
       const listo = () => {
         const p = usePlanesStore.getState();
-        return !!p.catalogos[cramo] && !p.catalogos[cramo].cargando && !p.cargandoContenedores && (p.contenedores !== null || !!p.errorContenedores);
+        return ramosEmision.every((r) => !!p.catalogos[r] && !p.catalogos[r].cargando) && !p.cargandoContenedores && (p.contenedores !== null || !!p.errorContenedores);
       };
       for (let i = 0; i < 100 && !listo(); i++) await new Promise((r) => setTimeout(r, 150));
       const p = usePlanesStore.getState();
+      const cproductor = Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080;
+      if (!rcg) {
+        return datosCotizacionRc(s, cotRc, {
+          vigenciaDias: 15,
+          emision: {
+            catalogos: Object.fromEntries(ramosEmision.map((r) => [r, p.catalogos[r]?.coberturas ?? null])), contenedores: p.contenedores,
+            planesConfigurados: { [RAMOS_RC.rcp]: import.meta.env.VITE_RCP_PLAN_CONTENEDOR, [RAMOS_RC.rce]: import.meta.env.VITE_RCE_PLAN_CONTENEDOR },
+            cproductor, esPersonaNatural: esPersonaNatural(c.tipoDoc),
+          },
+        });
+      }
+      const cramo = RAMOS_RC.rcg;
       return datosCotizacionRcg(s, cotRcg, {
         mesaTecnica, vigenciaDias,
         emision: {
           catalogo: p.catalogos[cramo]?.coberturas ?? null, contenedores: p.contenedores, planConfigurado: import.meta.env.VITE_RCG_PLAN_CONTENEDOR,
-          cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080, esPersonaNatural: esPersonaNatural(c.tipoDoc),
+          cproductor, esPersonaNatural: esPersonaNatural(c.tipoDoc),
         },
       });
     });

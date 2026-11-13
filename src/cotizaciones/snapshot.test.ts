@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { parsearCoberturasRamo } from '../tarifas/combo';
-import { coberturasRcg } from '../tarifas/emision-rc';
+import { coberturasRc, coberturasRcg } from '../tarifas/emision-rc';
 import type { RamoCatalogo } from '../tarifas/planes-rcg';
 import { cotizarRcg, PARAMETROS_RCG, type SolicitudRcg } from '../tarifas/rcg';
 import { actividadesDeClase, cotizarRc, PARAMETROS_RC, type SolicitudRc } from '../tarifas/rcp-rce';
 import {
-  datosCotizacionRc, datosCotizacionRcg, estadoParaReabrir, huellaCotizacion, planContenedorRcg, type ContextoEmision, type EstadoCotizador,
+  datosCotizacionRc, datosCotizacionRcg, estadoParaReabrir, huellaCotizacion, planContenedorRc, planContenedorRcg,
+  type ContextoEmision, type ContextoEmisionRc, type EstadoCotizador,
 } from './snapshot';
 
 const comun = {
@@ -121,6 +122,77 @@ describe('cotización RCP / RCE guardada', () => {
     expect(d.emisiones).toBeUndefined();
     expect(d.sinPagoEnLinea).toHaveLength(1);
     expect(estadoParaReabrir(d)).not.toBeNull();
+  });
+
+  // Sis2000 con las coberturas en USD de los ramos 27 y 37 y un plan contenedor vigente en cada uno.
+  type Body = { modo: string; cotizador: string; cramo: number; cplan: string; prima_total: number; ncotizacion: string; coberturas: { ccober: string; prima: number }[] };
+  const catalogoDe = (k: 'p' | 'e') => parsearCoberturasRamo({
+    status: true,
+    data: { coberturas: coberturasRc(cotizarRc(base).resultados.find((r) => r.k === k)!, 'USD').lineas.map((l) => ({ ccober: l.ccober, ctarifa: '1', xcobertura: l.concepto, cmoneda: '$' })) },
+  });
+  const planRc = (cramo: number, cplan: string) => ({ cramo, xramo: 'RC', cplan, xplan: cplan, cproducto: null, qcoberturas: 1, msumamax: 0, mprima: 0, cotizable: true });
+  const sis2000: ContextoEmisionRc = {
+    catalogos: { 27: catalogoDe('p'), 37: catalogoDe('e') },
+    contenedores: [{ cramo: 27, xramo: 'RCP', planes: [planRc(27, 'RCPGEN')] }, { cramo: 37, xramo: 'RCE', planes: [planRc(37, 'RCEGEN')] }],
+    cproductor: 80080, esPersonaNatural: false,
+  };
+
+  it('«Ambas»: cada opción lleva la emisión de las dos pólizas (27 y 37) y se paga la suma de las primas', () => {
+    const c = cotizarRc(base);
+    const d = datosCotizacionRc(s, c, { vigenciaDias: 15, emision: sis2000 });
+    expect(d.sinPagoEnLinea).toEqual([]);
+    expect(Object.keys(d.emisiones ?? {})).toEqual(['I', 'II', 'III']);
+    for (const a of d.alternativas) {
+      const bodies = d.emisiones![a.opcion] as Body[];
+      expect(bodies.map((b) => [b.modo, b.cotizador, b.cramo, b.cplan])).toEqual([['cotizador', 'rcp', 27, 'RCPGEN'], ['cotizador', 'rce', 37, 'RCEGEN']]);
+      expect(bodies[0].prima_total + bodies[1].prima_total).toBeCloseTo(a.prima, 2);
+      // La prima de cada póliza es la de ese producto en esa opción, y es la suma de sus coberturas.
+      expect(bodies.map((b) => b.prima_total)).toEqual(a.detalle!.map((x) => x.prima));
+      for (const b of bodies) expect(b.coberturas.reduce((t, x) => t + x.prima, 0)).toBeCloseTo(b.prima_total, 2);
+    }
+    // Cada opción emite con sus propios límites, no con los de la opción marcada.
+    const basica = (o: 'I' | 'III') => (d.emisiones![o] as { coberturas: { suma: number }[] }[])[0].coberturas[0].suma;
+    expect(basica('III')).toBeGreaterThan(basica('I'));
+    expect(JSON.parse(JSON.stringify(d)).emisiones.II).toHaveLength(2);
+  });
+
+  it('solo RCP o solo RCE: una póliza por opción (un body, como RCG)', () => {
+    const soloP = datosCotizacionRc({ ...s, rc: { ...rc, modo: 'p' } } as unknown as EstadoCotizador, cotizarRc({ ...base, modo: 'p' }), { vigenciaDias: 15, emision: sis2000 });
+    expect(soloP.producto).toBe('rcp');
+    expect(soloP.emisiones!.II).toMatchObject({ modo: 'cotizador', cotizador: 'rcp', cramo: 27, cplan: 'RCPGEN', prima_total: soloP.alternativas[1].prima });
+    const soloE = datosCotizacionRc({ ...s, rc: { ...rc, modo: 'e' } } as unknown as EstadoCotizador, cotizarRc({ ...base, modo: 'e' }), { vigenciaDias: 15, emision: sis2000 });
+    expect(soloE.producto).toBe('rce');
+    expect(soloE.emisiones!.I).toMatchObject({ cotizador: 'rce', cramo: 37, cplan: 'RCEGEN', prima_total: soloE.alternativas[0].prima });
+  });
+
+  it('sin plan vigente en el ramo, sin catálogo, en EUR o con descuento a validar no se paga en línea, y dice por qué', () => {
+    const c = cotizarRc(base);
+    const sinPlan = datosCotizacionRc(s, c, { vigenciaDias: 15, emision: { ...sis2000, contenedores: [sis2000.contenedores![0]] } });
+    expect(sinPlan.emisiones).toBeUndefined();
+    expect(sinPlan.sinPagoEnLinea).toEqual(['Responsabilidad Civil Empresarial: El ramo 37 no tiene planes vigentes en Sis2000: La Mundial debe crear o activar uno para poder emitir.']);
+    expect(sinPlan.alternativas).toHaveLength(3);
+    const sinCatalogo = datosCotizacionRc(s, c, { vigenciaDias: 15, emision: { ...sis2000, catalogos: { 27: sis2000.catalogos[27] } } });
+    expect(sinCatalogo.emisiones).toBeUndefined();
+    expect(sinCatalogo.sinPagoEnLinea[0]).toContain('ramo 37');
+    const eur = datosCotizacionRc(s, cotizarRc({ ...base, moneda: 'EUR' }), { vigenciaDias: 15, emision: sis2000 });
+    expect(eur.emisiones).toBeUndefined();
+    expect(eur.sinPagoEnLinea[0]).toContain('EUR');
+    const conDescuento = datosCotizacionRc(s, cotizarRc({ ...base, p: { ...base.p, ajuste: -5 } }), { vigenciaDias: 15, emision: sis2000 });
+    expect(conDescuento.emisiones).toBeUndefined();
+    expect(conDescuento.sinPagoEnLinea[0]).toContain('área técnica');
+    // Hernia no existe en USD en Sis2000: esa cotización no se puede emitir sola.
+    const hernia = datosCotizacionRc(s, cotizarRc({ ...base, p: { ...base.p, adicionales: [false, true] } }), { vigenciaDias: 15, emision: sis2000 });
+    expect(hernia.emisiones).toBeUndefined();
+    expect(hernia.sinPagoEnLinea[0]).toContain('Hernia');
+  });
+
+  it('plan contenedor de RCP / RCE: el configurado si está vigente o el único del ramo', () => {
+    const dos = [{ cramo: 27, xramo: 'RCP', planes: [planRc(27, 'A'), planRc(27, 'B')] }];
+    expect(planContenedorRc(sis2000.contenedores, 27)).toEqual({ cplan: 'RCPGEN' });
+    expect(planContenedorRc(dos, 27, 'B')).toEqual({ cplan: 'B' });
+    expect(planContenedorRc(dos, 27, 'NOEXISTE').falta).toContain('varios planes vigentes (A, B)');
+    expect(planContenedorRc(sis2000.contenedores, 28).falta).toContain('no tiene planes vigentes');
+    expect(planContenedorRc(null, 27).falta).toContain('No se pudieron leer');
   });
 
   it('solo patronal se guarda como rcp', () => {

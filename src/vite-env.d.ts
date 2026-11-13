@@ -11,4 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_MODO_CLIENTE?: string;
   /** Plan contenedor del ramo 28 para emitir el RCG pagado en línea (p. ej. PBT1 o RCGGEN); sin él, PLANI / PLANII / PLAN3. */
   readonly VITE_RCG_PLAN_CONTENEDOR?: string;
+  /** Plan contenedor de RCP (ramo 27) y de RCE (ramo 37) para el pago en línea; sin él, el único plan vigente del ramo. */
+  readonly VITE_RCP_PLAN_CONTENEDOR?: string;
+  readonly VITE_RCE_PLAN_CONTENEDOR?: string;
 }

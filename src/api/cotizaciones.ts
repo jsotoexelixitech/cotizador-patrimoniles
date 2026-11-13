@@ -7,9 +7,22 @@ const BASE = '/nexus/api/cotizaciones-rc';
 
 export type EstadoCotizacion = 'cotizada' | 'pendiente_pago' | 'pagada' | 'emitida';
 
-export interface PolizaGuardada {
+export interface CobroPoliza { ok: boolean; pendiente?: boolean; ingresoCaja?: string | null; error?: string; mpago?: number }
+
+/** Una póliza de la cotización. Con RCP + RCE son dos: `cramo` (27 / 37) y `prima` dicen cuál es cada una. */
+export interface PolizaDeCotizacion {
   cnpoliza: string; cnrecibo: string; urlpoliza: string;
-  cobro?: { ok: boolean; pendiente?: boolean; ingresoCaja?: string | null; error?: string };
+  cramo?: number; prima?: number;
+  cobro?: CobroPoliza;
+}
+
+/**
+ * Póliza(s) de la cotización: en la raíz, la primera (formato de siempre); en `polizas`, todas (usa polizasDe de
+ * cotizaciones/polizas). `parcial`: pagada con alguna póliza aún sin emitir.
+ */
+export interface PolizaGuardada extends PolizaDeCotizacion {
+  polizas?: PolizaDeCotizacion[];
+  parcial?: boolean;
 }
 
 export interface CotizacionGuardada {
@@ -33,7 +46,11 @@ export interface CotizacionGuardada {
   error: string | null;
 }
 
-export interface Checkout { codigo: string; opcion: Opcion; prima: number; moneda: string; tasa: number; totalVes: number; checkoutUrl: string }
+export interface Checkout {
+  codigo: string; opcion: Opcion; prima: number; moneda: string; tasa: number; totalVes: number; checkoutUrl: string;
+  /** Pólizas que se emiten con ese pago (dos con RCP + RCE). */
+  polizas?: { cramo: number; producto: string; prima: number }[];
+}
 
 /** Error de la API con su código HTTP (404 no existe, 410 vencida). */
 export class ErrorCotizacion extends Error {
@@ -85,7 +102,10 @@ export const crearCheckout = (codigo: string, opcion: Opcion, returnUrl: string,
 export const registrarEmisionPendiente = (codigo: string, opcion: Opcion | null, poliza: { cnpoliza: string; cnrecibo: string; urlpoliza: string }) =>
   pedir<CotizacionGuardada>(`/${encodeURIComponent(codigo)}/estado`, json('PATCH', { estado: 'emitida', opcion, poliza }));
 
-/** Admin: reintenta la emisión de una pagada sin póliza, el cobro de una emitida con el recibo pendiente o el correo de la póliza. */
+/**
+ * Admin: reintenta la emisión de una pagada sin póliza (o con una de sus dos pólizas sin emitir: no reemite la que ya
+ * salió), el cobro de los recibos pendientes de una emitida o el correo de la póliza.
+ */
 export const reintentarCotizacion = (codigo: string) => pedir<CotizacionGuardada>(`/${encodeURIComponent(codigo)}/reintentar`, json('POST', {}));
 
 /** Código con el formato oficial (RCG-2026-000123-7KQ4); el provisional del cotizador no lo cumple. */

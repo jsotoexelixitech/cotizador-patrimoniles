@@ -1,15 +1,17 @@
 // JSON de la cotización que se guarda en Exélixi Nexus (cotizaciones-rc): lo que ve el cliente al traerla por código
 // (tomador, riesgo, opciones I/II/III con suma y prima, coberturas), el descuento aplicado, el estado del cotizador
 // para reabrirla y, por opción, el body de emisión ya armado: con el pago confirmado Nexus emite con ese body, sin
-// pasar por el navegador del cliente.
+// pasar por el navegador del cliente. RCP + RCE («Ambas») son dos pólizas: la opción lleva un body por ramo (27 y 37)
+// y se paga la suma de las dos primas.
 import type { CotizacionState } from '../store/cotizacionStore';
 import { rifCompleto } from '../store/cotizacionStore';
 import { pideUnidad, planesContenedor, type CoberturaRamo } from '../tarifas/combo';
 import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
-import { armarEmisionInformada, coberturasRcg, faltantesEmisionRc } from '../tarifas/emision-rc';
+import { redondear } from '../tarifas/comun';
+import { armarEmisionInformada, coberturasRc, coberturasRcg, faltantesEmisionRc } from '../tarifas/emision-rc';
 import type { RamoCatalogo } from '../tarifas/planes-rcg';
 import type { AlternativaRcg, CotizacionRcg } from '../tarifas/rcg';
-import { NOMBRES, type CotizacionRc, type IdOpcion } from '../tarifas/rcp-rce';
+import { NOMBRES, type CotizacionRc, type IdOpcion, type ResultadoProducto } from '../tarifas/rcp-rce';
 
 export type Opcion = 'I' | 'II' | 'III';
 export type ProductoGuardado = 'rcg' | 'rcp' | 'rce' | 'rc';
@@ -23,7 +25,7 @@ export interface AlternativaGuardada {
   descuentoPct?: number;
   tasaInicial?: number;
   tasaAplicada?: number;
-  /** RCP / RCE: prima de cada producto dentro de la opción. */
+  /** RCP / RCE: prima de cada producto (cada póliza) dentro de la opción. */
   detalle?: { nombre: string; prima: number }[];
 }
 
@@ -45,7 +47,10 @@ export interface DatosCotizacion {
   notaIgtf: boolean;
   mesaTecnica: boolean;
   vigenciaDias: number;
-  /** Body de POST riesgos-generales/emision (modo cotizador) por opción. Sin él, la opción no se paga en línea. */
+  /**
+   * Body de POST riesgos-generales/emision (modo cotizador) por opción: uno (RCG, RCP o RCE) o un arreglo con uno por
+   * póliza (RCP + RCE). Sin él, la opción no se paga en línea.
+   */
   emisiones?: Partial<Record<Opcion, unknown>>;
   /** Por qué no se puede pagar en línea (vacío = se puede). */
   sinPagoEnLinea: string[];
@@ -129,11 +134,87 @@ export function datosCotizacionRcg(
   };
 }
 
+/** Sis2000 para emitir RCP (ramo 27) y RCE (ramo 37) con el pago en línea. */
+export interface ContextoEmisionRc {
+  /** Coberturas en Sis2000 de cada ramo cotizado (GET riesgos-generales/coberturas); sin el ramo o null = no se leyeron. */
+  catalogos: Partial<Record<number, CoberturaRamo[] | null>>;
+  contenedores: RamoCatalogo[] | null;
+  /** Plan contenedor configurado por ramo (VITE_RCP_PLAN_CONTENEDOR → 27, VITE_RCE_PLAN_CONTENEDOR → 37). */
+  planesConfigurados?: Partial<Record<number, string | undefined>>;
+  cproductor: number;
+  esPersonaNatural: boolean;
+}
+
 /**
- * RCP / RCE: se guarda para consultarla y reabrirla. USD/EUR: una alternativa por opción con la prima de los productos
- * cotizados; Bs.: una sola. No lleva body de emisión (son dos pólizas): se emite con el asesor.
+ * Plan contenedor de un ramo de RCP / RCE: el configurado si está vigente o el único vigente del ramo. Si no hay
+ * ninguno claro devuelve por qué (`falta`): sin plan contenedor esa póliza no se puede emitir.
  */
-export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vigenciaDias: number }): DatosCotizacion {
+export function planContenedorRc(contenedores: RamoCatalogo[] | null, cramo: number, configurado = ''): { cplan: string; falta?: string } {
+  if (!contenedores) return { cplan: '', falta: 'No se pudieron leer los planes vigentes de Sis2000.' };
+  const planes = planesContenedor(contenedores, cramo);
+  const pedido = configurado.trim();
+  if (pedido && planes.some((p) => p.cplan === pedido)) return { cplan: pedido };
+  if (planes.length === 1) return { cplan: planes[0].cplan };
+  if (!planes.length) return { cplan: '', falta: `El ramo ${cramo} no tiene planes vigentes en Sis2000: La Mundial debe crear o activar uno para poder emitir.` };
+  return { cplan: '', falta: `El ramo ${cramo} tiene varios planes vigentes (${planes.map((p) => p.cplan).join(', ')}): hay que definir cuál es el contenedor.` };
+}
+
+const SIN_PAGO_RC = 'RC Patronal / Empresarial se emite con tu asesor de seguros.';
+
+/** RCP / RCE: body(s) de emisión de cada opción (uno por ramo cotizado) o por qué no se puede pagar en línea. */
+function emisionesRc(
+  s: EstadoCotizador, cot: CotizacionRc, alternativas: AlternativaGuardada[], conOpciones: boolean, e: ContextoEmisionRc,
+): { emisiones: Partial<Record<Opcion, unknown>>; sinPagoEnLinea: string[] } {
+  const c = s.comun;
+  const emisiones: Partial<Record<Opcion, unknown>> = {};
+  if (cot.simbolo === 'EUR') {
+    return { emisiones, sinPagoEnLinea: ['El pago en línea solo está disponible en USD o Bs.: no hay tasa oficial del euro para cobrar en bolívares. En EUR se emite con tu asesor de seguros.'] };
+  }
+  // Un descuento o una tasa fuera de rango quedan sujetos a Técnico: no se emite sola.
+  if (cot.avisos.length) return { emisiones, sinPagoEnLinea: [`Sujeta a validación del área técnica. ${cot.avisos.join(' ')}`] };
+  const ramos = cot.resultados.map((r) => {
+    const cramo = RAMOS_RC[r.k === 'p' ? 'rcp' : 'rce'];
+    return { r, cramo, catalogo: e.catalogos[cramo] ?? null, plan: planContenedorRc(e.contenedores, cramo, e.planesConfigurados?.[cramo]) };
+  });
+  const generales = ramos.flatMap((x) => [
+    ...(x.catalogo ? [] : [`${NOMBRES[x.r.k]}: no se pudieron verificar las coberturas del ramo ${x.cramo} en Sis2000.`]),
+    ...(x.plan.falta ? [`${NOMBRES[x.r.k]}: ${x.plan.falta}`] : []),
+  ]);
+  if (!ramos.length || generales.length) return { emisiones, sinPagoEnLinea: generales.length ? generales : [SIN_PAGO_RC] };
+  const sinPagoEnLinea: string[] = [];
+  for (const a of alternativas) {
+    const faltan: string[] = [];
+    const bodies: { prima_total: number }[] = [];
+    for (const { r, catalogo, plan } of ramos) {
+      // La emisión de la opción: los límites y la prima de esa opción (USD), o la única prima en Bs.
+      const o = conOpciones ? r.opciones?.find((x) => x.id === a.opcion) : undefined;
+      const delaOpcion: ResultadoProducto = o ? { ...r, opcion: o.id, prima: o.prima, limites: [...o.limites] } : r;
+      const emision = coberturasRc(delaOpcion, cot.simbolo, catalogo);
+      const f = faltantesEmisionRc({ emision, valida: !cot.errores.length, documento: c.documento, cplan: plan.cplan, apartamento: '', direccion: c.ubicacion });
+      if (f.length) { faltan.push(`${NOMBRES[r.k]}: ${f.join(' ')}`); continue; }
+      bodies.push(armarEmisionInformada({
+        // El número lo pone Nexus al emitir (el código de la cotización).
+        cplan: plan.cplan, emision, ncotizacion: 'COTIZACION', tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
+        apellido: e.esPersonaNatural ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
+        bien: [s.rc.indole, r.riesgo?.[0]].filter(Boolean).join(' · ') || c.asegurado, cproductor: e.cproductor,
+      }));
+    }
+    // Lo que se cobra es la prima de la opción: tiene que ser exactamente la suma de las pólizas que se emiten.
+    const suma = redondear(bodies.reduce((t, b) => t + b.prima_total, 0));
+    if (!faltan.length && Math.abs(suma - a.prima) > 0.01) faltan.push(`la suma de las primas de emisión (${suma}) no coincide con la prima cotizada (${a.prima}).`);
+    if (faltan.length) { sinPagoEnLinea.push(`Opción ${a.opcion}: ${faltan.join(' ')}`); continue; }
+    emisiones[a.opcion] = bodies.length === 1 ? bodies[0] : bodies;
+  }
+  return { emisiones, sinPagoEnLinea };
+}
+
+/**
+ * RCP / RCE: USD/EUR: una alternativa por opción con la prima de los productos cotizados; Bs.: una sola. Con
+ * `emision` (catálogos y planes de Sis2000) deja armado, por opción, el body de emisión de cada póliza: una si se cotizó
+ * solo RCP o solo RCE, dos con «Ambas» (ramos 27 y 37), y la prima a pagar es la suma. Sin `emision` solo se guarda
+ * para consultarla y reabrirla.
+ */
+export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vigenciaDias: number; emision?: ContextoEmisionRc }): DatosCotizacion {
   const ids: IdOpcion[] = ['I', 'II', 'III'];
   const conOpciones = cot.resultados.length > 0 && cot.resultados.every((r) => r.opciones?.length);
   const alternativas: AlternativaGuardada[] = conOpciones
@@ -149,6 +230,8 @@ export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vi
     : [{ opcion: 'I', limite: Math.max(0, ...cot.resultados.map((r) => r.limites[2] ?? 0)), prima: cot.total, detalle: cot.resultados.map((r) => ({ nombre: NOMBRES[r.k], prima: r.prima })) }];
   const producto: ProductoGuardado = s.rc.modo === 'p' ? 'rcp' : s.rc.modo === 'e' ? 'rce' : 'rc';
   const elegida = cot.resultados[0]?.opcion ?? null;
+  const { emisiones, sinPagoEnLinea } = x.emision
+    ? emisionesRc(s, cot, alternativas, conOpciones, x.emision) : { emisiones: {}, sinPagoEnLinea: [SIN_PAGO_RC] };
   return {
     version: 1, producto, nombreProducto: cot.resultados.map((r) => NOMBRES[r.k]).join(' + ') || 'RC Patronal / Empresarial',
     tomador: tomadorDe(s), riesgo: { indole: s.rc.indole, actividad: cot.resultados.map((r) => r.riesgo?.[0]).filter(Boolean).join(' · '), esContrato: s.contrato.esContrato, ...contratoDe(s) },
@@ -159,7 +242,7 @@ export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vi
       montos: alternativas.map((a) => r.opciones?.find((o) => o.id === a.opcion)?.limites[2] ?? r.limites[2] ?? 0),
     })),
     deducible: '', condiciones: [], notaIgtf: cot.simbolo !== 'Bs', mesaTecnica: false, vigenciaDias: x.vigenciaDias,
-    sinPagoEnLinea: ['RC Patronal / Empresarial se emite con tu asesor de seguros.'], estado: estadoDe(s),
+    ...(Object.keys(emisiones).length ? { emisiones } : {}), sinPagoEnLinea, estado: estadoDe(s),
   };
 }
 

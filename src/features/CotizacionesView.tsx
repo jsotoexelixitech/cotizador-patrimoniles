@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Eye, Loader2, Search } from 'lucide-react';
 import { buscarCotizaciones, type CotizacionGuardada, type FiltroCotizaciones } from '../api/cotizaciones';
 import { Aviso } from '../components/ui/Aviso';
+import { polizasDe } from '../cotizaciones/polizas';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/Button';
 import { Field, Input, Select } from '../components/ui/FormField';
@@ -98,7 +99,7 @@ export function CotizacionesView() {
                         <td className="px-3 py-2 whitespace-nowrap">
                           <Badge tone={visible === 'emitida' || visible === 'pagada' ? 'success' : visible === 'cotizada' ? 'indigo' : 'warn'}>{ETIQUETA_ESTADO[visible]}</Badge>
                         </td>
-                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">{f.poliza?.cnpoliza ?? '—'}</td>
+                        <td className="px-3 py-2 tabular-nums whitespace-nowrap">{polizasDe(f.poliza).map((p) => p.cnpoliza).join(' · ') || '—'}</td>
                         <td className="px-3 py-2 text-right">
                           <Button variant="ghost" size="sm" onClick={() => { abrirConsulta(f.codigo); window.scrollTo({ top: 0 }); }}><Eye size={13} /> Ver</Button>
                         </td>
