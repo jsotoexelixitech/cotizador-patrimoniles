@@ -91,3 +91,17 @@ oficial desde el backend.
   - Plan contenedor por ramo: `VITE_RCP_PLAN_CONTENEDOR` / `VITE_RCE_PLAN_CONTENEDOR` o el único plan vigente del ramo. Si el ramo no tiene plan vigente en Sis2000 (13-nov-2026: los ramos 27 y 37 no tienen ninguno en QA), la cotización se guarda pero no se paga en línea y la vista del canal dice por qué.
   - Fuera del pago en línea: **EUR** (nest-api solo tiene tasa BCV del dólar: `GET moneda/tasa-bcv`), cotizaciones con descuento o tasa fuera de rango (sujetas al área técnica) y coberturas sin equivalente en Sis2000 en esa moneda (p. ej. hernia en USD; en Bs. faltan varias de RCP). RCP/RCE no llevan PDF de condicionado y anexos.
 - Parámetros → **Configurar descuentos**: tramos «desde suma asegurada → % de descuento sobre la tasa básica» (RCG: suma de cada opción; RCP/RCE en USD/EUR: límite por evento). Sin tramos no cambia nada; el descuento solo se ve en vista técnica y se guarda con la cotización.
+
+## Producción GCIA (patrimoniales.exelixitech.com)
+
+- Carpeta `~/exelixi/cotizador-rc`, rama `main`. Una vez: `node scripts/crear-env-prod.mjs` (crea la key de nest-api con
+  `NEST_ADMIN_TOKEN`, toma la de Nexus y el secreto de firma de `nexus-api/.env`; no muestra ninguna key).
+- Desplegar: `bash scripts/deploy-prod.sh` (`CON_ADMIN=1` para la vista admin). Guarda de hostname, `git pull --ff-only`,
+  build con base `/`, PM2 y healthcheck.
+- Vista cliente pública: PM2 `cotizador-patrimoniales`, `127.0.0.1:5195`, `COTIZADOR_CLIENTE=1`. Vista admin (opcional):
+  `cotizador-patrimoniales-admin`, `127.0.0.1:5185`, sin Apache (túnel SSH o publicación restringida por infra).
+- `COTIZADOR_ENTORNO=produccion`: la emisión directa desde el cotizador queda cerrada (se emite por Nexus) y la firma
+  hacia Nexus es obligatoria.
+- Guardar cotización (`POST /nexus/api/cotizaciones-rc`) pasa por `servidor/proxyNexus.ts`: en la vista cliente recalcula
+  la prima con la tarifa oficial (`src/cotizaciones/verificarPrima.ts`) y responde 400 si no coincide; siempre firma el
+  body con `x-cotizador-firma` = HMAC-SHA256 hex (`COTIZACIONES_RC_SECRET`).

@@ -4,7 +4,7 @@
 // pasar por el navegador del cliente. RCP + RCE («Ambas») son dos pólizas: la opción lleva un body por ramo (27 y 37)
 // y se paga la suma de las dos primas.
 import type { CotizacionState } from '../store/cotizacionStore';
-import { rifCompleto } from '../store/cotizacionStore';
+import { rifCompleto } from './solicitud';
 import { pideUnidad, planesContenedor, type CoberturaRamo } from '../tarifas/combo';
 import { PLAN_RCG_POR_OPCION, RAMOS_RC } from '../tarifas/data/mapeo-sis2000';
 import { redondear } from '../tarifas/comun';
@@ -214,10 +214,12 @@ function emisionesRc(
  * solo RCP o solo RCE, dos con «Ambas» (ramos 27 y 37), y la prima a pagar es la suma. Sin `emision` solo se guarda
  * para consultarla y reabrirla.
  */
-export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vigenciaDias: number; emision?: ContextoEmisionRc }): DatosCotizacion {
+const conOpcionesRc = (cot: CotizacionRc) => cot.resultados.length > 0 && cot.resultados.every((r) => r.opciones?.length);
+
+/** RCP / RCE: alternativas guardadas (USD/EUR: una por opción con la suma de los productos; Bs.: una sola). */
+export function alternativasRc(cot: CotizacionRc): AlternativaGuardada[] {
   const ids: IdOpcion[] = ['I', 'II', 'III'];
-  const conOpciones = cot.resultados.length > 0 && cot.resultados.every((r) => r.opciones?.length);
-  const alternativas: AlternativaGuardada[] = conOpciones
+  return conOpcionesRc(cot)
     ? ids.filter((id) => cot.resultados.every((r) => r.opciones!.some((o) => o.id === id))).map((id) => {
       const partes = cot.resultados.map((r) => ({ r, o: r.opciones!.find((o) => o.id === id)! }));
       const d = partes.find((p) => p.o.descuentoPct != null)?.o;
@@ -228,6 +230,11 @@ export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vi
       };
     })
     : [{ opcion: 'I', limite: Math.max(0, ...cot.resultados.map((r) => r.limites[2] ?? 0)), prima: cot.total, detalle: cot.resultados.map((r) => ({ nombre: NOMBRES[r.k], prima: r.prima })) }];
+}
+
+export function datosCotizacionRc(s: EstadoCotizador, cot: CotizacionRc, x: { vigenciaDias: number; emision?: ContextoEmisionRc }): DatosCotizacion {
+  const conOpciones = conOpcionesRc(cot);
+  const alternativas = alternativasRc(cot);
   const producto: ProductoGuardado = s.rc.modo === 'p' ? 'rcp' : s.rc.modo === 'e' ? 'rce' : 'rc';
   const elegida = cot.resultados[0]?.opcion ?? null;
   const { emisiones, sinPagoEnLinea } = x.emision

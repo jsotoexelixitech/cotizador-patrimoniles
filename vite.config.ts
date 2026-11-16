@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { proxyNexusFirmado } from './servidor/proxyNexus';
 
 // VITE_APP_BASE permite servirlo bajo un subpath (p. ej. /cotizador-rc/) igual que los módulos RCV.
 export default defineConfig(({ mode }) => {
@@ -8,7 +9,14 @@ export default defineConfig(({ mode }) => {
   // NEST_API_URL y NEST_API_KEY van en .env.local sin prefijo VITE_, así no entran al bundle.
   const env = loadEnv(mode, process.cwd(), '');
   const target = (env.NEST_API_URL || '').replace(/\/$/, '');
-  const esQa = /nexusqa|cierrelmds|localhost|127\.0\.0\.1/.test(target);
+  // Producción GCIA (COTIZADOR_ENTORNO=produccion): nest-api también es 127.0.0.1, así que la URL ya no distingue QA.
+  // Ahí la emisión directa desde el cotizador queda cerrada: se emite por Nexus (pago confirmado o «emitir como
+  // pendiente» del canal). COTIZADOR_EMISION_DIRECTA=1 la reabre solo si se decide expresamente.
+  const vars = (k: string) => process.env[k] || env[k] || '';
+  const produccion = vars('COTIZADOR_ENTORNO') === 'produccion';
+  const esQa = produccion
+    ? vars('COTIZADOR_EMISION_DIRECTA') === '1'
+    : /nexusqa|cierrelmds|localhost|127\.0\.0\.1/.test(target);
   // En el servidor la app vive bajo VITE_APP_BASE (p. ej. /cotizador-rc/): las llamadas llegan como /cotizador-rc/nest/…
   // Se quita ese prefijo para validar las rutas y antes de reenviar a nest-api / Nexus. En local el prefijo es vacío.
   const base = process.env.VITE_APP_BASE || env.VITE_APP_BASE || '/';
@@ -57,6 +65,7 @@ export default defineConfig(({ mode }) => {
               proxyReq.setHeader('x-cotizador-origen', cliente || esExterno(req) ? 'cliente' : 'admin');
             });
           },
+          // POST /api/cotizaciones-rc (crear) no llega aquí: lo atiende servidor/proxyNexus.ts (prima recalculada + firma).
         },
       }
     : {};
@@ -88,9 +97,22 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_SOLO_PASTORA': JSON.stringify(publico ? '1' : ''),
       'import.meta.env.VITE_MODO_CLIENTE': JSON.stringify(cliente ? '1' : ''),
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      ...(nexus
+        ? [proxyNexusFirmado({
+            nexus, apiKey: env.NEXUS_API_KEY, secreto: env.COTIZACIONES_RC_SECRET || undefined, exigirFirma: produccion,
+            habilitado: !publico, sinBase, esCliente: (req) => cliente || esExterno(req),
+            verificacion: { cproductor: Number(env.VITE_RCG_PLANES_CPRODUCTOR) || 80080 },
+          })]
+        : []),
+    ],
+    // Producción: un build por vista (cliente en dist/, admin en dist-admin/); preview sirve el de COTIZADOR_OUTDIR.
+    build: { outDir: process.env.COTIZADOR_OUTDIR || 'dist' },
     server: { host: true, port: 5180, proxy, allowedHosts: ['.trycloudflare.com'] },
     // Servidor (121): `vite preview` detrás de Apache en /cotizador-rc/, con el mismo proxy que deja las keys en el servidor.
-    preview: { host: true, port: Number(process.env.PORT) || 5185, strictPort: true, proxy, allowedHosts: ['.trycloudflare.com', '.exelixitech.com'] },
+    // COTIZADOR_HOST=127.0.0.1 en producción: solo Apache (o un túnel SSH) llega al puerto.
+    preview: { host: process.env.COTIZADOR_HOST || true, port: Number(process.env.PORT) || 5185, strictPort: true, proxy, allowedHosts: ['.trycloudflare.com', '.exelixitech.com'] },
   };
 });
