@@ -105,3 +105,19 @@ oficial desde el backend.
 - Guardar cotización (`POST /nexus/api/cotizaciones-rc`) pasa por `servidor/proxyNexus.ts`: en la vista cliente recalcula
   la prima con la tarifa oficial (`src/cotizaciones/verificarPrima.ts`) y responde 400 si no coincide; siempre firma el
   body con `x-cotizador-firma` = HMAC-SHA256 hex (`COTIZACIONES_RC_SECRET`).
+
+## Solicitud de seguro para firmar (casada con la emisión)
+
+- Formatos aprobados por La Mundial en `src/solicitudes/plantillas/`: RCG ramo 28, RCP ramo 27, RCE ramo 37 (Word con
+  campos de formulario protegidos). Al quedar emitida la póliza se llena el del ramo con los datos de la emisión; coberturas
+  y límites dicen «Según cotización N° …» (o «Según plan …»); firmas, huellas y documentos de identidad quedan vacíos.
+- Dónde: «Póliza emitida» de la cotización guardada (admin y cliente, flujo pagado o emitida por el canal) y emisión directa
+  de la vista admin. Botón «Descargar solicitud para firmar» (PDF) y «Word» (.docx, mismo formato). RCP + RCE: una por
+  póliza. «Enviar póliza por correo» la adjunta en PDF. No aparece en la cotización.
+- `docx.ts` llena el .docx tocando solo los resultados de los campos; `solicitudes.ts` ubica cada campo por su rótulo;
+  `pdf.ts` escribe los mismos datos sobre el PDF en blanco que exportó Word, en la posición que midió Word.
+- Si La Mundial cambia un formato: reemplazar el .docx y correr en Windows con Word
+  `powershell -ExecutionPolicy Bypass -File scripts\solicitudes\preparar-plantillas.ps1` (regenera el PDF en blanco y la
+  posición de cada campo; las casillas se ajustan al cuadrado del PDF con `scripts/solicitudes/ajustar-casillas.mjs`).
+- En el PDF, los campos dentro de texto corrido (los «Yo, ____» de la Declaración de fe) quedan para escribir a mano: el PDF
+  no puede correr el texto. En el Word van llenos.

@@ -24,6 +24,9 @@ import { usePlanesStore } from '../store/planesStore';
 import { toast } from '../store/toastStore';
 import { useWizardStore } from '../store/wizardStore';
 import { importe, porcentaje } from '../tarifas/comun';
+import { solicitudesDeCotizacion } from '../solicitudes/desdeEmision';
+import type { DatosSolicitud } from '../solicitudes/solicitudes';
+import { SolicitudesParaFirmar } from './SolicitudesFirma';
 
 const fecha = (v: string) => new Date(v).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
 
@@ -131,6 +134,22 @@ function Dato({ label, children }: { label: string; children: React.ReactNode })
 
 /** Cada cuánto se consulta el estado mientras se paga o se emite, y hasta cuándo. */
 const ESPERA_MS = 5000;
+
+/**
+ * Solicitud de seguro de cada póliza emitida (formato aprobado del ramo) con los datos de la emisión. La fecha es la del
+ * pago o, emitida por el canal sin pago, la de hoy. Un snapshot viejo o incompleto no rompe la pantalla: sin solicitud.
+ */
+function solicitudesEmitidas(d: DatosCotizacion, cot: CotizacionGuardada, polizas: PolizaDeCotizacion[]): DatosSolicitud[] {
+  const pagada = cot.pago?.fecha ? new Date(cot.pago.fecha) : null;
+  try {
+    return solicitudesDeCotizacion({
+      datos: d, codigo: cot.codigo, opcion: cot.opcion ?? d.opcionElegida, polizas,
+      fecha: pagada && !Number.isNaN(pagada.getTime()) ? pagada : new Date(),
+    });
+  } catch {
+    return [];
+  }
+}
 const MAX_CONSULTAS = 120;
 
 function Cotizacion({ codigo }: { codigo: string }) {
@@ -280,6 +299,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
   // RCP + RCE son dos pólizas con un solo pago: todo lo de la póliza se muestra por cada una.
   const polizas = polizasDe(cot.poliza);
   const varias = polizas.length > 1;
+  const solicitudes = cot.estado === 'emitida' ? solicitudesEmitidas(d, cot, polizas) : [];
   const cobrado = todasCobradas(polizas);
   const correoEnviado = !!cot.correoPoliza?.enviadoEn;
   const aPagar = polizasDeOpcion(d, elegida?.opcion ?? null);
@@ -522,6 +542,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
               </div>
             )}
           </SectionCard>
+          <SolicitudesParaFirmar solicitudes={solicitudes} />
           {docs.length > 0 && (
             <SectionCard title="Condicionados y anexos de la póliza" Icon={FileText} statusLabel={`${docs.length} documentos`} statusTone="success">
               <ul className="divide-y divide-slate-100">
@@ -541,7 +562,8 @@ function Cotizacion({ codigo }: { codigo: string }) {
               prima={varias ? (p.prima ? m(p.prima) : undefined) : elegida ? m(elegida.prima) : undefined} docs={docs}
               producto={varias ? nombrePoliza(p, d.nombreProducto) : d.nombreProducto}
               tomador={{ correo: d.tomador.correo, nombre: d.tomador.nombre, rif: d.tomador.rif }}
-              urlRecibo={p.cobro?.ok ? p.cobro.ingresoCaja : null} />
+              urlRecibo={p.cobro?.ok ? p.cobro.ingresoCaja : null}
+              solicitud={solicitudes.find((x) => x.cnpoliza === p.cnpoliza) ?? null} />
           ))}
         </>
       )}

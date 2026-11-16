@@ -104,6 +104,17 @@ describe('armarPayloadPoliza', () => {
     expect(adjuntosQueCaben({ poliza, recibo, anexos }, 10)).toEqual([recibo, anexos]);
     expect(adjuntosQueCaben({ poliza, recibo: null }, 10)).toEqual([poliza]);
   });
+  it('la solicitud para firmar va después del recibo y antes de los anexos; cede solo ante los anexos', () => {
+    const poliza = { pdf: new Uint8Array(6), nombreArchivo: 'Poliza.pdf' };
+    const recibo = { pdf: new Uint8Array(2), nombreArchivo: 'Recibo.pdf' };
+    const anexos = { pdf: new Uint8Array(6), nombreArchivo: 'Anexos.pdf' };
+    const solicitud = { pdf: new Uint8Array(3), nombreArchivo: 'Solicitud_RCG_1.pdf' };
+    expect(adjuntosQueCaben({ poliza, recibo, anexos, solicitud }, 20)).toEqual([poliza, recibo, solicitud, anexos]);
+    expect(adjuntosQueCaben({ poliza, recibo, anexos, solicitud }, 12)).toEqual([recibo, solicitud, anexos]);
+    const p = armarPayloadPoliza({ correo: 'a@b.com', nombre: 'Ana', cnpoliza: '28-1-1', producto: 'RCG', adjuntos: [solicitud], conSolicitud: true });
+    expect(p.data.intro).toContain('solo falta su firma');
+    expect(p.attachments[0].filename).toBe('Solicitud_RCG_1.pdf');
+  });
   it('avisa cuando el envío se cancela por tiempo', () => {
     expect(mensajeErrorCorreo(408, null)).toMatch(/tardó demasiado/);
   });

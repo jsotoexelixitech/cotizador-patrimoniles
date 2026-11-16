@@ -114,15 +114,20 @@ export type DatosCorreoPoliza = {
   urlpoliza?: string;
   /** PDF de la póliza (si se pudo descargar) y el condicionado con sus anexos. */
   adjuntos: { pdf: Uint8Array; nombreArchivo: string }[];
+  /** Entre los adjuntos va la solicitud de seguro llena para firmar. */
+  conSolicitud?: boolean;
 };
 
 export type AdjuntoPdf = { pdf: Uint8Array; nombreArchivo: string };
 
 /**
- * Adjuntos que caben en el tope del correo. Si el total lo supera, la prioridad es: anexos (no tienen enlace), póliza
- * (si queda fuera va el botón «Ver mi póliza») y recibo. En el correo van en orden póliza, recibo, anexos.
+ * Adjuntos que caben en el tope del correo. Si el total lo supera, la prioridad es: anexos (no tienen enlace), solicitud
+ * para firmar, póliza (si queda fuera va el botón «Ver mi póliza») y recibo. En el correo van en orden póliza, recibo,
+ * solicitud, anexos.
  */
-export function adjuntosQueCaben(c: { poliza?: AdjuntoPdf | null; recibo?: AdjuntoPdf | null; anexos?: AdjuntoPdf | null }, max = MAX_ADJUNTO_BYTES): AdjuntoPdf[] {
+export function adjuntosQueCaben(c: {
+  poliza?: AdjuntoPdf | null; recibo?: AdjuntoPdf | null; anexos?: AdjuntoPdf | null; solicitud?: AdjuntoPdf | null;
+}, max = MAX_ADJUNTO_BYTES): AdjuntoPdf[] {
   let total = 0;
   const cabe = (x?: AdjuntoPdf | null) => {
     if (!x || total + x.pdf.length > max) return null;
@@ -130,9 +135,10 @@ export function adjuntosQueCaben(c: { poliza?: AdjuntoPdf | null; recibo?: Adjun
     return x;
   };
   const anexos = cabe(c.anexos);
+  const solicitud = cabe(c.solicitud);
   const poliza = cabe(c.poliza);
   const recibo = cabe(c.recibo);
-  return [poliza, recibo, anexos].filter((x): x is AdjuntoPdf => !!x);
+  return [poliza, recibo, solicitud, anexos].filter((x): x is AdjuntoPdf => !!x);
 }
 
 export const asuntoPoliza = (cnpoliza: string) => `La Mundial de Seguros | Póliza N.º ${cnpoliza}`;
@@ -165,7 +171,9 @@ export function armarPayloadPoliza(d: DatosCorreoPoliza): PayloadCorreo {
       eyebrow: 'Póliza',
       title: 'Su póliza de La Mundial de Seguros',
       intro: `${saludo} Le enviamos su póliza N.º ${d.cnpoliza} de ${d.producto} con el condicionado general y particular y los anexos `
-        + 'de las coberturas contratadas. Ante cualquier duda, puede comunicarse con su asesor de seguros.',
+        + 'de las coberturas contratadas.'
+        + (d.conSolicitud ? ' También le enviamos la solicitud de seguro llena con sus datos: solo falta su firma.' : '')
+        + ' Ante cualquier duda, puede comunicarse con su asesor de seguros.',
       extraNote: 'Conserve este correo: el condicionado y los anexos forman parte integrante de su contrato de seguro.',
       // Botón de la plantilla branded (no el enlace suelto en la tabla de datos).
       ...(d.urlpoliza ? { ctaLabel: 'Ver mi póliza', ctaUrl: d.urlpoliza } : {}),
