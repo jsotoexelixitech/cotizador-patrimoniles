@@ -3,8 +3,9 @@
 import {
   armarPayloadCorreo, armarPayloadPoliza, mensajeErrorCorreo, type DatosCorreoCotizacion, type DatosCorreoPoliza, type PayloadCorreo,
 } from '../correo/correoCotizacion';
+import { rutaApi } from './base';
 
-const URL_MAIL = '/nest/api/v1/mail/send';
+const URL_MAIL = rutaApi('/nest/api/v1/mail/send');
 /** Con adjuntos de varios MB nest-api tarda; pasado este tiempo se cancela y se muestra el error (nunca queda colgado). */
 const TIMEOUT_MS = 120_000;
 

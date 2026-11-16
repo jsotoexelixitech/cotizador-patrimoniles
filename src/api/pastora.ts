@@ -1,8 +1,9 @@
 // Pastora (ramo 25): cotizar y emitir por v1/riesgos-generales de nest-api, vía el proxy /nest de vite.config.ts
 // (la key la agrega el proxy; nunca llega al navegador). La emisión solo pasa si NEST_API_URL apunta a QA/dev.
 import { mensajeErrorPastora, parsearResultadoPastora, type PayloadPastora, type ResultadoPastora } from '../tarifas/pastora';
+import { rutaApi } from './base';
 
-const BASE = '/nest/api/v1/riesgos-generales';
+const BASE = rutaApi('/nest/api/v1/riesgos-generales');
 
 /** Error con el status HTTP y el mensaje de nest-api para mostrarlo en pantalla. */
 export class ErrorPastora extends Error {

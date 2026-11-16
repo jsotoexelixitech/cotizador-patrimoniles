@@ -9,6 +9,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const target = (env.NEST_API_URL || '').replace(/\/$/, '');
   const esQa = /nexusqa|cierrelmds|localhost|127\.0\.0\.1/.test(target);
+  // En el servidor la app vive bajo VITE_APP_BASE (p. ej. /cotizador-rc/): las llamadas llegan como /cotizador-rc/nest/…
+  // Se quita ese prefijo para validar las rutas y antes de reenviar a nest-api / Nexus. En local el prefijo es vacío.
+  const base = process.env.VITE_APP_BASE || env.VITE_APP_BASE || '/';
+  const prefijo = base.replace(/\/$/, '');
+  const sinBase = (url: string) => (prefijo && url.startsWith(`${prefijo}/`) ? url.slice(prefijo.length) : url);
   // COTIZADOR_PUBLICO=1 (link por túnel): la key solo sirve para cotizar/emitir Pastora; todo lo demás 404.
   const publico = (process.env.COTIZADOR_PUBLICO || env.COTIZADOR_PUBLICO) === '1';
   const rutaPastora = (url: string) =>
@@ -18,7 +23,7 @@ export default defineConfig(({ mode }) => {
   // `npm run dev:cliente` (--mode cliente) no depende de variables de la consola (set de CMD / $env de PowerShell).
   const cliente = mode === 'cliente' || (process.env.COTIZADOR_CLIENTE || env.COTIZADOR_CLIENTE) === '1';
   const rutaCliente = (req: { url?: string; method?: string }) => {
-    const url = req.url ?? '';
+    const url = sinBase(req.url ?? '');
     if (req.method === 'POST') return /^\/nest\/api\/v1\/mail\/send(\?|$)/.test(url);
     return req.method === 'GET'
       && /^\/nest\/api\/v1\/(valrep\/planes\/riesgos-generales|riesgos-generales\/(coberturas|ramos))(\?|$)/.test(url);
@@ -31,19 +36,19 @@ export default defineConfig(({ mode }) => {
   // Cliente: guardar su cotización, traer una por código (sin parámetros: ni lista ni historial) y mandarla a pagar.
   // «Emitir como pendiente» (/:codigo/emitir-pendiente) queda fuera a propósito: es solo del canal; el cliente siempre paga.
   const rutaNexusCliente = (req: { url?: string; method?: string }) => {
-    const url = req.url ?? '';
+    const url = sinBase(req.url ?? '');
     if (req.method === 'POST') return /^\/nexus\/api\/cotizaciones-rc(\/[A-Za-z0-9-]+\/checkout)?$/.test(url);
     return req.method === 'GET' && /^\/nexus\/api\/cotizaciones-rc\/[A-Za-z0-9-]+$/.test(url);
   };
   const proxyNexus: Record<string, ProxyOptions> = nexus
     ? {
-        '/nexus': {
+        [`${prefijo}/nexus`]: {
           target: nexus,
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/nexus/, ''),
+          rewrite: (p) => sinBase(p).replace(/^\/nexus/, ''),
           headers: env.NEXUS_API_KEY ? { 'x-api-key': env.NEXUS_API_KEY } : {},
           bypass: (req) => {
-            if (publico || !rutaNexus(req.url ?? '')) return false;
+            if (publico || !rutaNexus(sinBase(req.url ?? ''))) return false;
             return (cliente || esExterno(req)) && !rutaNexusCliente(req) ? false : undefined;
           },
           // Nexus registra quién creó la cotización; lo decide el servidor, no el navegador.
@@ -57,14 +62,14 @@ export default defineConfig(({ mode }) => {
     : {};
   const proxyNest: Record<string, ProxyOptions> | undefined = target
     ? {
-        '/nest': {
+        [`${prefijo}/nest`]: {
           target,
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/nest/, ''),
+          rewrite: (p) => sinBase(p).replace(/^\/nest/, ''),
           headers: env.NEST_API_KEY ? { apikey: env.NEST_API_KEY } : {},
           // Emitir solo contra QA/dev: con cualquier otro destino la ruta de emisión responde 404.
           bypass: (req) => {
-            const url = req.url ?? '';
+            const url = sinBase(req.url ?? '');
             if (publico && !rutaPastora(url)) return false;
             // Mismo puerto para admin y cliente: lo que entra por el túnel se trata siempre como cliente.
             const externo = /\.trycloudflare\.com$/i.test(String(req.headers.host ?? '').split(':')[0]);
@@ -77,7 +82,7 @@ export default defineConfig(({ mode }) => {
   const proxy: Record<string, ProxyOptions> | undefined = proxyNest || nexus ? { ...(proxyNest ?? {}), ...proxyNexus } : undefined;
 
   return {
-    base: process.env.VITE_APP_BASE || '/',
+    base,
     // Link público: la app abre solo el formulario de Pastora (ModuleShell / wizardStore).
     define: {
       'import.meta.env.VITE_SOLO_PASTORA': JSON.stringify(publico ? '1' : ''),
@@ -85,6 +90,7 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [react(), tailwindcss()],
     server: { host: true, port: 5180, proxy, allowedHosts: ['.trycloudflare.com'] },
-    preview: { proxy },
+    // Servidor (121): `vite preview` detrás de Apache en /cotizador-rc/, con el mismo proxy que deja las keys en el servidor.
+    preview: { host: true, port: Number(process.env.PORT) || 5185, strictPort: true, proxy, allowedHosts: ['.trycloudflare.com', '.exelixitech.com'] },
   };
 });

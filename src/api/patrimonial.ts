@@ -5,8 +5,9 @@ import { errorDeRespuesta, parsearCatalogo, parsearEmision, type RamoCatalogo, t
 import { parsearTarifa, type PlanTarifa } from '../tarifas/coberturas';
 import { parsearCoberturasRamo, type CoberturaRamo } from '../tarifas/combo';
 import { parsearRamos, type RamoPatrimonial } from '../tarifas/ramos';
+import { rutaApi } from './base';
 
-const BASE = '/nest/api/v1/partner/starter/patrimonial';
+const BASE = rutaApi('/nest/api/v1/partner/starter/patrimonial');
 
 /** 404 de una ruta que ese nest-api todavía no tiene: falta desplegar la versión nueva. */
 class RutaSinDesplegar extends Error {}
@@ -51,11 +52,11 @@ const post = (ruta: 'quote' | 'emit', body: unknown) =>
 
 /** Planes vigentes de riesgos generales en Sis2000, agrupados por ramo. */
 export const listarPlanes = async (): Promise<RamoCatalogo[]> =>
-  parsearCatalogo(await pedir('/nest/api/v1/valrep/planes/riesgos-generales', { method: 'GET' }, 'catalogo'));
+  parsearCatalogo(await pedir(rutaApi('/nest/api/v1/valrep/planes/riesgos-generales'), { method: 'GET' }, 'catalogo'));
 
 /** Combo: planes vigentes de todos los ramos patrimoniales (incluidos 20 y 25), para elegir el plan contenedor. */
 export const listarPlanesContenedor = async (): Promise<RamoCatalogo[]> =>
-  parsearCatalogo(await pedir('/nest/api/v1/valrep/planes/riesgos-generales', { method: 'GET' }, 'catalogo'), { conRamosExcluidos: true });
+  parsearCatalogo(await pedir(rutaApi('/nest/api/v1/valrep/planes/riesgos-generales'), { method: 'GET' }, 'catalogo'), { conRamosExcluidos: true });
 
 /** spCalculoRiesgoGeneral: solo ramo, plan y frecuencia; suma y prima salen de maplantar. */
 export const cotizarPlan = (cramo: number, cplan: string) =>
@@ -65,13 +66,13 @@ export const emitirPlan = async (payload: unknown): Promise<ResultadoEmision> =>
 
 /** Tarifa por cobertura del plan (ramos 16 y 38), ruta propia del cotizador en nest-api. */
 export async function tarificarRamo(cramo: number, cplan: string): Promise<PlanTarifa | null> {
-  return parsearTarifa(await pedir(`/nest/api/v1/riesgos-generales/tarifa?cramo=${cramo}&cplan=${encodeURIComponent(cplan)}`, { method: 'GET' }, 'tarificador'));
+  return parsearTarifa(await pedir(rutaApi(`/nest/api/v1/riesgos-generales/tarifa?cramo=${cramo}&cplan=${encodeURIComponent(cplan)}`), { method: 'GET' }, 'tarificador'));
 }
 
 /** Combo: todos los ramos patrimoniales de Sis2000 (maramos). null = ese nest-api aún no tiene la ruta (404). */
 export async function listarRamosPatrimoniales(): Promise<RamoPatrimonial[] | null> {
   try {
-    return parsearRamos(await pedir('/nest/api/v1/riesgos-generales/ramos', { method: 'GET' }, 'ramos'));
+    return parsearRamos(await pedir(rutaApi('/nest/api/v1/riesgos-generales/ramos'), { method: 'GET' }, 'ramos'));
   } catch (e) {
     if (e instanceof RutaSinDesplegar) return null;
     throw e;
@@ -80,7 +81,7 @@ export async function listarRamosPatrimoniales(): Promise<RamoPatrimonial[] | nu
 
 /** Combo de coberturas: todas las coberturas con tarifa vigente del ramo, sin plan (ruta propia del cotizador). */
 export async function coberturasDeRamo(cramo: number): Promise<CoberturaRamo[]> {
-  return parsearCoberturasRamo(await pedir(`/nest/api/v1/riesgos-generales/coberturas?cramo=${cramo}`, { method: 'GET' }, 'coberturas'));
+  return parsearCoberturasRamo(await pedir(rutaApi(`/nest/api/v1/riesgos-generales/coberturas?cramo=${cramo}`), { method: 'GET' }, 'coberturas'));
 }
 
 /**
@@ -88,4 +89,4 @@ export async function coberturasDeRamo(cramo: number): Promise<CoberturaRamo[]> 
  * ramo, plan y tarifas antes de emitir. Sus mensajes de error se muestran tal cual.
  */
 export const emitirCoberturas = async (payload: unknown): Promise<ResultadoEmision> =>
-  parsearEmision(await pedir('/nest/api/v1/riesgos-generales/emision', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'emit'));
+  parsearEmision(await pedir(rutaApi('/nest/api/v1/riesgos-generales/emision'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 'emit'));

@@ -2,8 +2,9 @@
 // Nexus la agrega el proxy y nunca llega al navegador. Por el link del cliente el proxy solo deja guardar, traer por
 // código y mandar a pagar.
 import type { DatosCotizacion, Opcion, ProductoGuardado } from '../cotizaciones/snapshot';
+import { rutaApi } from './base';
 
-const BASE = '/nexus/api/cotizaciones-rc';
+const BASE = rutaApi('/nexus/api/cotizaciones-rc');
 
 export type EstadoCotizacion = 'cotizada' | 'pendiente_pago' | 'pagada' | 'emitida';
 
