@@ -2,6 +2,7 @@
 // Nexus la agrega el proxy y nunca llega al navegador. Por el link del cliente el proxy solo deja guardar, traer por
 // código y mandar a pagar.
 import type { DatosCotizacion, Opcion, ProductoGuardado } from '../cotizaciones/snapshot';
+import { cabecerasSso } from '../sso/token';
 import { rutaApi } from './base';
 
 const BASE = rutaApi('/nexus/api/cotizaciones-rc');
@@ -41,6 +42,11 @@ export interface CotizacionGuardada {
   /** La lista no trae el JSON completo. */
   datos?: DatosCotizacion;
   pago: { opcion?: Opcion; totalVes?: number; tasa?: number; checkoutUrl?: string; referencia?: string; monto?: number; fecha?: string } | null;
+  /**
+   * Quién la cotizó (SSO de Sys2000): intermediario con su nombre y productor, o la web de La Mundial. Las cotizaciones
+   * de antes del SSO no lo traen.
+   */
+  emitidaPor?: EmitidaPor | null;
   /** Emisión sin pago hecha por el canal desde la cotización guardada (en curso, a medias o terminada): ya no se paga en línea. */
   canal?: { opcion: Opcion } | null;
   poliza: PolizaGuardada | null;
@@ -48,6 +54,16 @@ export interface CotizacionGuardada {
   correoPoliza?: { enviadoEn: string | null; a: string | null; error: string | null } | null;
   error: string | null;
 }
+
+/** «Emitida por» de Nexus: sin login, correo ni cusuario. */
+export interface EmitidaPor { modo: 'intermediario' | 'web'; nombre: string | null; cproductor: number | null }
+
+/** Texto de «Emitida por» / «Cotizada por» para la vista admin. */
+export const textoEmitidaPor = (e: EmitidaPor | null | undefined): string | null => {
+  if (!e) return null;
+  if (e.modo === 'web') return 'Cotización web (La Mundial directo)';
+  return [e.nombre ?? 'Intermediario', e.cproductor ? `Productor ${e.cproductor}` : null].filter(Boolean).join(' · ');
+};
 
 export interface Checkout {
   codigo: string; opcion: Opcion; prima: number; moneda: string; tasa: number; totalVes: number; checkoutUrl: string;
@@ -63,7 +79,7 @@ export class ErrorCotizacion extends Error {
 async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}${ruta}`, { ...init, headers: { 'Content-Type': 'application/json' } });
+    res = await fetch(`${BASE}${ruta}`, { ...init, headers: { 'Content-Type': 'application/json', ...cabecerasSso() } });
   } catch {
     throw new ErrorCotizacion('Sin conexión con Exélixi Nexus.', 0);
   }
@@ -71,6 +87,8 @@ async function pedir<T>(ruta: string, init?: RequestInit): Promise<T> {
   if (res.ok && body?.success && body.data !== undefined) return body.data;
   // Sin JSON (404 del proxy, o la página del cotizador si /nexus no existe): el proxy no está configurado o bloqueó la ruta.
   if (body === null) throw new ErrorCotizacion('Guardado de cotizaciones sin configurar: define NEXUS_API_URL y NEXUS_API_KEY en .env.local y reinicia npm run dev.', 404);
+  // Sesión de Sys2000 vencida o inválida: la responde el servidor del cotizador, no Nexus.
+  if ((body as { sso?: unknown }).sso && body.message) throw new ErrorCotizacion(body.message, res.status);
   if (res.status === 403) throw new ErrorCotizacion('Nexus rechazó la key del cotizador (NEXUS_API_KEY en .env.local).', 403);
   throw new ErrorCotizacion(body?.message || `Exélixi Nexus respondió HTTP ${res.status}.`, res.status);
 }
