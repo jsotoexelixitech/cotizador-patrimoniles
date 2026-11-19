@@ -444,7 +444,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
                   <Button variant="secondary" size="lg" disabled={!acepta || ocupado} onClick={() => void emitirPendiente()}
                     title="Se emitirá sin pago; el recibo queda pendiente de cobro">
                     {emitiendo ? <Loader2 size={15} className="animate-spin" /> : <FileCheck2 size={15} />}
-                    {emitiendo ? 'Emitiendo…' : 'Emitir como pendiente (canal)'}
+                    {emitiendo ? 'Emitiendo…' : 'Emitir como pendiente'}
                   </Button>
                 )}
                 {cot.estado === 'pendiente_pago' && (
