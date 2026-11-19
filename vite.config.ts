@@ -1,8 +1,9 @@
+import type { IncomingMessage } from 'node:http';
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { proxyNexusFirmado } from './servidor/proxyNexus';
-import { configSso, escribirCuerpoReescrito, sesionSso } from './servidor/sesionSso';
+import { configSso, escribirCuerpoReescrito, sesionDe, sesionSso } from './servidor/sesionSso';
 import { PRODUCTOR_WEB_POR_DEFECTO } from './src/sso/actor';
 
 // VITE_APP_BASE permite servirlo bajo un subpath (p. ej. /cotizador-rc/) igual que los módulos RCV.
@@ -42,6 +43,10 @@ export default defineConfig(({ mode }) => {
   // NEXUS_API_URL y NEXUS_API_KEY van en .env.local sin prefijo VITE_. La key solo sirve para cotizaciones-rc.
   const nexus = (env.NEXUS_API_URL || '').replace(/\/$/, '');
   const esExterno = (req: { headers: { host?: string } }) => /\.trycloudflare\.com$/i.test(String(req.headers.host ?? '').split(':')[0]);
+  // Vista cliente por petición: el build cliente (o el túnel) sigue siendo cliente, salvo que la petición traiga un
+  // nexus_token VÁLIDO de Sys2000 (intermediario): esa sesión trabaja con la vista y las rutas técnicas.
+  const esClienteReq = (req: IncomingMessage) =>
+    (cliente || esExterno(req)) && sesionDe(req, sso).modo !== 'intermediario';
   const rutaNexus = (url: string) => /^\/nexus\/api\/cotizaciones-rc(\/|\?|$)/.test(url);
   // Cliente: guardar su cotización, traer una por código (sin parámetros: ni lista ni historial) y mandarla a pagar.
   // «Emitir como pendiente» (/:codigo/emitir-pendiente) queda fuera a propósito: es solo del canal; el cliente siempre paga.
@@ -59,12 +64,12 @@ export default defineConfig(({ mode }) => {
           headers: env.NEXUS_API_KEY ? { 'x-api-key': env.NEXUS_API_KEY } : {},
           bypass: (req) => {
             if (publico || !rutaNexus(sinBase(req.url ?? ''))) return false;
-            return (cliente || esExterno(req)) && !rutaNexusCliente(req) ? false : undefined;
+            return esClienteReq(req) && !rutaNexusCliente(req) ? false : undefined;
           },
           // Nexus registra quién creó la cotización; lo decide el servidor, no el navegador.
           configure: (p) => {
             p.on('proxyReq', (proxyReq, req) => {
-              proxyReq.setHeader('x-cotizador-origen', cliente || esExterno(req) ? 'cliente' : 'admin');
+              proxyReq.setHeader('x-cotizador-origen', esClienteReq(req) ? 'cliente' : 'admin');
             });
           },
           // POST /api/cotizaciones-rc (crear) no llega aquí: lo atiende servidor/proxyNexus.ts (prima recalculada + firma).
@@ -88,9 +93,8 @@ export default defineConfig(({ mode }) => {
           bypass: (req) => {
             const url = sinBase(req.url ?? '');
             if (publico && !rutaPastora(url)) return false;
-            // Mismo puerto para admin y cliente: lo que entra por el túnel se trata siempre como cliente.
-            const externo = /\.trycloudflare\.com$/i.test(String(req.headers.host ?? '').split(':')[0]);
-            if ((cliente || externo) && !rutaCliente(req)) return false;
+            // Mismo puerto para admin y cliente: lo que entra por el túnel se trata como cliente (salvo sesión Sys2000).
+            if (esClienteReq(req) && !rutaCliente(req)) return false;
             return !esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(url) ? false : undefined;
           },
           // Emisión: el plugin sesionSso ya leyó el cuerpo y le puso el productor/usuario de la sesión; se manda ese.
@@ -114,7 +118,7 @@ export default defineConfig(({ mode }) => {
       ...(nexus
         ? [proxyNexusFirmado({
             nexus, apiKey: env.NEXUS_API_KEY, secreto: env.COTIZACIONES_RC_SECRET || undefined, exigirFirma: produccion,
-            habilitado: !publico, sinBase, esCliente: (req) => cliente || esExterno(req),
+            habilitado: !publico, sinBase, esCliente: (req) => esClienteReq(req),
             // El productor exigido en los bodies de emisión es el de la sesión (token o web): lo pone proxyNexus.
             verificacion: { cproductor: sso.productorWeb }, sso,
           })]
