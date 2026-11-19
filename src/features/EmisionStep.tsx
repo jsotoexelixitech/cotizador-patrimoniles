@@ -365,8 +365,10 @@ export function EmisionStep() {
 
       {/* Condicionado y anexos: no van en la cotización; se muestran y se envían con la póliza emitida (PolizaEmitida). */}
       {/* Vista cliente: solo cotiza; la emisión la hace el canal (nunca se emite sin pago). */}
-      {!MODO_CLIENTE && (planes ? <EmitirPlan docs={docsSis2000} /> : combo ? <EmitirCombo numero={numero} docs={docsSis2000} />
-        : rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />)}
+      {/* Emisión directa de prueba (Sis2000 QA): solo con su variable activa; en producción no se muestra. */}
+      {!MODO_CLIENTE && (planes || combo
+        ? import.meta.env.VITE_RCG_PLANES_EMITIR === '1' && (planes ? <EmitirPlan docs={docsSis2000} /> : <EmitirCombo numero={numero} docs={docsSis2000} />)
+        : import.meta.env.VITE_RC_EMITIR === '1' && (rcg ? <EmitirRcg numero={numero} /> : <EmitirRcpRce numero={numero} />))}
 
       {/* Código oficial de Nexus: con él el cliente trae la cotización, elige opción y paga; el canal la manda a pagar. */}
       {guardando && <p className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={14} className="animate-spin" /> Guardando la cotización…</p>}
