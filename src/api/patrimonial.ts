@@ -5,6 +5,7 @@ import { errorDeRespuesta, parsearCatalogo, parsearEmision, type RamoCatalogo, t
 import { parsearTarifa, type PlanTarifa } from '../tarifas/coberturas';
 import { parsearCoberturasRamo, type CoberturaRamo } from '../tarifas/combo';
 import { parsearRamos, type RamoPatrimonial } from '../tarifas/ramos';
+import { cabecerasSso } from '../sso/token';
 import { rutaApi } from './base';
 
 const BASE = rutaApi('/nest/api/v1/partner/starter/patrimonial');
@@ -15,12 +16,15 @@ class RutaSinDesplegar extends Error {}
 async function pedir(url: string, init: RequestInit, ruta: 'quote' | 'emit' | 'catalogo' | 'tarificador' | 'coberturas' | 'ramos'): Promise<unknown> {
   let res: Response;
   try {
-    res = await fetch(url, init);
+    res = await fetch(url, { ...init, headers: { ...(init.headers as Record<string, string> | undefined), ...cabecerasSso() } });
   } catch {
     throw new Error('Sin conexión con nest-api.');
   }
   const data: unknown = await res.json().catch(() => null);
   if (res.ok) return data;
+  // Sesión de Sys2000 vencida o inválida: la responde el servidor del cotizador antes de llegar a nest-api.
+  const sso = data as { sso?: unknown; message?: unknown } | null;
+  if (sso?.sso && typeof sso.message === 'string') throw new Error(sso.message);
   if (res.status === 404 && data === null) {
     throw new Error(ruta === 'emit'
       ? 'Emisión bloqueada: NEST_API_URL no apunta a QA.'

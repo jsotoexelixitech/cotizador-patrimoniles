@@ -33,6 +33,7 @@ import { EMISOR_CLIENTE, MODO_CLIENTE } from '../config/modoCliente';
 import { esCodigoOficial, registrarEmisionPendiente } from '../api/cotizaciones';
 import { datosCotizacionRc, datosCotizacionRcg, huellaCotizacion } from '../cotizaciones/snapshot';
 import { useCotizacionGuardadaStore } from '../store/cotizacionGuardadaStore';
+import { productorActual } from '../store/sesionStore';
 import { adicionalesRc, solicitudDeAsistente } from '../solicitudes/desdeEmision';
 import type { DatosSolicitud } from '../solicitudes/solicitudes';
 import { SolicitudesParaFirmar } from './SolicitudesFirma';
@@ -187,7 +188,7 @@ export function EmisionStep() {
       };
       for (let i = 0; i < 100 && !listo(); i++) await new Promise((r) => setTimeout(r, 150));
       const p = usePlanesStore.getState();
-      const cproductor = Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080;
+      const cproductor = productorActual();
       if (!rcg) {
         return datosCotizacionRc(s, cotRc, {
           vigenciaDias: 15,
@@ -504,7 +505,7 @@ function EmitirPlan({ docs }: { docs: DocumentoRcg[] }) {
     const aviso = `Se emitirá en Sis2000 QA ${plan.nombre} (${plan.cplan}) por USD ${importe(prima)} a nombre de ${c.asegurado}. `
       + 'El recibo queda pendiente de cobro. ¿Continuar?';
     if (!window.confirm(aviso)) return;
-    const cproductor = Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080;
+    const cproductor = productorActual();
     if (cobCot) {
       if (!cobCot.valida) { toast.error("Revisa las coberturas", "Vuelve al paso de cotización: hay sumas fuera de rango o sin tasa."); return; }
       const r = await emitir(armarEmisionCoberturas({
@@ -533,7 +534,7 @@ function EmitirPlan({ docs }: { docs: DocumentoRcg[] }) {
   if (emision) {
     return (
       <PolizaEmitida emision={emision} prima={plan ? `USD ${importe(cobCot ? cobCot.cot.prima_total : plan.prima)}` : undefined} docs={docs} producto={plan?.nombre}
-        solicitud={plan ? { cramo: plan.cramo, referencia: `Según plan ${plan.cplan}`, moneda: 'USD', coberturas: [], cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080 } : undefined} />
+        solicitud={plan ? { cramo: plan.cramo, referencia: `Según plan ${plan.cplan}`, moneda: 'USD', coberturas: [], cproductor: productorActual() } : undefined} />
     );
   }
 
@@ -765,7 +766,7 @@ function EmitirCombo({ numero, docs }: { numero: string; docs: DocumentoRcg[] })
   if (emision) {
     return (
       <PolizaEmitida emision={emision} prima={r ? `${r.moneda} ${importe(r.cot.prima_total)}` : undefined} docs={docs} producto={`combo de coberturas de ${xramo}`}
-        solicitud={r ? { cramo: r.cramo, referencia: `Según cotización N° ${numero}`, moneda: r.moneda, coberturas: [], cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080 } : undefined} />
+        solicitud={r ? { cramo: r.cramo, referencia: `Según cotización N° ${numero}`, moneda: r.moneda, coberturas: [], cproductor: productorActual() } : undefined} />
     );
   }
   if (!r) return null;
@@ -779,7 +780,7 @@ function EmitirCombo({ numero, docs }: { numero: string; docs: DocumentoRcg[] })
       cramo: r.cramo, cplan, cot: r.cot, catalogo: r.catalogo, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
       apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
       bien: rcg.actividadEspecifica || c.asegurado, apartamento: pideUnidad(r.cramo) ? Number(c.apartamento) || undefined : undefined,
-      cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+      cproductor: productorActual(),
     };
     const em = await emitir(informada ? armarEmisionComboInformada({ ...datos, ncotizacion: numero.replace(/^RCG/, 'COMBO'), ...(oficial ? { cotizador: oficial.cotizador } : {}) }) : armarEmisionCombo(datos), 'coberturas');
     if (em) toast.success('Póliza emitida en QA', `${em.cnpoliza} · recibo ${em.cnrecibo || '—'}`);
@@ -1023,7 +1024,7 @@ function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerid
       <PolizaEmitida emision={resultado} prima={emision ? `${moneda} ${importe(emision.primaTotal)}` : undefined} docs={docs} producto={producto}
         solicitud={emision ? {
           cramo: emision.cramo, referencia: `Según cotización N° ${ncotizacion}`, moneda, opcion: opcionEmitida, coberturas: coberturasSolicitud,
-          actividad: bien, cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+          actividad: bien, cproductor: productorActual(),
         } : undefined} />
     );
   }
@@ -1050,7 +1051,7 @@ function EmitirInformada({ titulo, emision, valida, ncotizacion, moneda, sugerid
         cplan, emision, ncotizacion, tipoDoc: c.tipoDoc, documento: c.documento, nombre: c.asegurado,
         apellido: esPersonaNatural(c.tipoDoc) ? c.apellido : '', correo: c.correo, telefono: c.telefono, direccion: c.ubicacion,
         bien: bien || c.asegurado, apartamento: pideUnidad(emision.cramo) ? Number(c.apartamento) || undefined : undefined,
-        cproductor: Number(import.meta.env.VITE_RCG_PLANES_CPRODUCTOR) || 80080,
+        cproductor: productorActual(),
       }));
       setResultado(r);
       toast.success('Póliza emitida en QA', `${r.cnpoliza} · recibo ${r.cnrecibo || '—'}`);

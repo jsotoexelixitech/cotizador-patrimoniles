@@ -15,7 +15,10 @@ import { alternativasRc, estadoParaReabrir, type AlternativaGuardada, type Estad
 import { claseRc, EMISOR_CLIENTE, solicitudRc, solicitudRcg } from './solicitud';
 
 export interface ConfigVerificacion {
-  /** Productor que deben llevar los bodies de emisión (VITE_RCG_PLANES_CPRODUCTOR); sin él no se exige. */
+  /**
+   * Productor que deben llevar los bodies de emisión: el del nexus_token validado (intermediario) o el del canal web
+   * (VITE_RCG_PLANES_CPRODUCTOR). Lo decide servidor/proxyNexus.ts; sin él no se exige.
+   */
   cproductor?: number;
 }
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Eye, Loader2, Search } from 'lucide-react';
-import { buscarCotizaciones, type CotizacionGuardada, type FiltroCotizaciones } from '../api/cotizaciones';
+import { buscarCotizaciones, textoEmitidaPor, type CotizacionGuardada, type FiltroCotizaciones } from '../api/cotizaciones';
 import { Aviso } from '../components/ui/Aviso';
 import { polizasDe } from '../cotizaciones/polizas';
 import { Badge } from '../components/ui/Badge';
@@ -83,7 +83,7 @@ export function CotizacionesView() {
               <table className="w-full text-[0.8rem]">
                 <thead className="bg-slate-50 text-slate-600">
                   <tr>
-                    {['Código', 'Tomador', 'RIF / cédula', 'Creada', 'Vence', 'Estado', 'Póliza', ''].map((c) => <th key={c} className="text-left font-bold px-3 py-2 whitespace-nowrap">{c}</th>)}
+                    {['Código', 'Tomador', 'RIF / cédula', 'Creada', 'Emitida por', 'Vence', 'Estado', 'Póliza', ''].map((c) => <th key={c} className="text-left font-bold px-3 py-2 whitespace-nowrap">{c}</th>)}
                   </tr>
                 </thead>
                 <tbody>
@@ -95,6 +95,7 @@ export function CotizacionesView() {
                         <td className="px-3 py-2">{f.tomador.nombre}</td>
                         <td className="px-3 py-2 tabular-nums whitespace-nowrap">{f.tomador.documento ?? '—'}</td>
                         <td className="px-3 py-2 tabular-nums whitespace-nowrap">{fecha(f.creadaEn)}</td>
+                        <td className="px-3 py-2">{textoEmitidaPor(f.emitidaPor) ?? '—'}</td>
                         <td className="px-3 py-2 tabular-nums whitespace-nowrap">{fecha(f.expiraEn)}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           <Badge tone={visible === 'emitida' || visible === 'pagada' ? 'success' : visible === 'cotizada' ? 'indigo' : 'warn'}>{ETIQUETA_ESTADO[visible]}</Badge>

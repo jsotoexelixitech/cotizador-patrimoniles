@@ -1,6 +1,7 @@
 // Pastora (ramo 25): cotizar y emitir por v1/riesgos-generales de nest-api, vía el proxy /nest de vite.config.ts
 // (la key la agrega el proxy; nunca llega al navegador). La emisión solo pasa si NEST_API_URL apunta a QA/dev.
 import { mensajeErrorPastora, parsearResultadoPastora, type PayloadPastora, type ResultadoPastora } from '../tarifas/pastora';
+import { cabecerasSso } from '../sso/token';
 import { rutaApi } from './base';
 
 const BASE = rutaApi('/nest/api/v1/riesgos-generales');
@@ -15,11 +16,13 @@ export class ErrorPastora extends Error {
 async function post(ruta: 'cotizacion' | 'emision', payload: unknown): Promise<ResultadoPastora> {
   let res: Response;
   try {
-    res = await fetch(`${BASE}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    res = await fetch(`${BASE}/${ruta}`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...cabecerasSso() }, body: JSON.stringify(payload) });
   } catch {
     throw new ErrorPastora(0, 'Sin conexión con nest-api.');
   }
   const data: unknown = await res.json().catch(() => null);
+  // Sesión de Sys2000 vencida o inválida (la responde el servidor del cotizador, no nest-api).
+  if (!res.ok && (data as { sso?: unknown } | null)?.sso) throw new ErrorPastora(res.status, String((data as { message?: unknown }).message ?? ''));
   if (!res.ok) throw new ErrorPastora(res.status, mensajeErrorPastora(res.status, data));
   if (data && typeof data === 'object' && (data as { status?: unknown }).status === false) {
     throw new ErrorPastora(res.status, mensajeErrorPastora(res.status, data));
