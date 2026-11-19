@@ -5,6 +5,7 @@ import { TopProgressBar } from './TopProgressBar';
 import { TopStepper } from './TopStepper';
 import { Toaster } from './Toaster';
 import { Badge } from './ui/Badge';
+import { SesionSso } from './SesionSso';
 import { MODULE_META, MODULE_STEPS } from '../config/module.config';
 import { useWizardStore } from '../store/wizardStore';
 import { useCotizacionStore } from '../store/cotizacionStore';
@@ -89,6 +90,7 @@ export function ModuleShell({ children }: { children: ReactNode }) {
                 <p className="text-[0.65rem] text-slate-400 mt-3 font-medium flex items-center gap-2 flex-wrap">
                   <span>{MODULE_META.brandName} · {MODULE_META.productName}{producto && !parametros ? ` · ${NOMBRE_PRODUCTO[producto]}` : ''}</span>
                   {personalizado && <Badge tone="warn">Tarifa personalizada</Badge>}
+                  {!SOLO_PASTORA && <SesionSso />}
                 </p>
               </div>
 

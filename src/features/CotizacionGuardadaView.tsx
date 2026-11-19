@@ -3,7 +3,7 @@ import {
   ArrowLeft, Check, Copy, CreditCard, Download, ExternalLink, FileCheck2, FileText, Loader2, MailCheck, Pencil, RefreshCw, Search, ShieldCheck, User,
 } from 'lucide-react';
 import {
-  crearCheckout, emitirComoPendiente, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, traerCotizacion, type Checkout, type CotizacionGuardada, type PolizaDeCotizacion,
+  crearCheckout, emitirComoPendiente, ErrorCotizacion, esCodigoOficial, reintentarCotizacion, textoEmitidaPor, traerCotizacion, type Checkout, type CotizacionGuardada, type PolizaDeCotizacion,
 } from '../api/cotizaciones';
 import { Aviso } from '../components/ui/Aviso';
 import { Badge } from '../components/ui/Badge';
@@ -328,6 +328,7 @@ function Cotizacion({ codigo }: { codigo: string }) {
           <Dato label={cot.vencida ? 'Venció el' : 'Válida hasta'}>{fecha(cot.expiraEn)}</Dato>
           {d.riesgo.contrato && <Dato label="Contrato">{d.riesgo.contrato}</Dato>}
           {admin && <Dato label="Creada">{fecha(cot.creadaEn)} · {cot.origen === 'cliente' ? 'por el cliente' : 'por el canal'}</Dato>}
+          {admin && textoEmitidaPor(cot.emitidaPor) && <Dato label={visible === 'emitida' ? 'Emitida por' : 'Cotizada por'}>{textoEmitidaPor(cot.emitidaPor)}</Dato>}
         </div>
       </SectionCard>
 

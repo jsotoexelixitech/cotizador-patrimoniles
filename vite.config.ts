@@ -2,6 +2,8 @@ import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { proxyNexusFirmado } from './servidor/proxyNexus';
+import { configSso, escribirCuerpoReescrito, sesionSso } from './servidor/sesionSso';
+import { PRODUCTOR_WEB_POR_DEFECTO } from './src/sso/actor';
 
 // VITE_APP_BASE permite servirlo bajo un subpath (p. ej. /cotizador-rc/) igual que los módulos RCV.
 export default defineConfig(({ mode }) => {
@@ -69,6 +71,12 @@ export default defineConfig(({ mode }) => {
         },
       }
     : {};
+  // SSO de Nexus (botón de Sys2000 → sso-delegate target cotizador-rc → ?nexus_token=): TENANT_TOKEN_SECRET (el de
+  // nexus-api) valida el token en este servidor; de él salen productor y usuario. Sin token = landing web (80080).
+  const sso = configSso(
+    { TENANT_TOKEN_SECRET: vars('TENANT_TOKEN_SECRET'), COTIZADOR_SSO_SUBMODULO_ID: vars('COTIZADOR_SSO_SUBMODULO_ID'), COTIZADOR_SSO_HORAS: vars('COTIZADOR_SSO_HORAS') },
+    Number(env.VITE_RCG_PLANES_CPRODUCTOR) || PRODUCTOR_WEB_POR_DEFECTO,
+  );
   const proxyNest: Record<string, ProxyOptions> | undefined = target
     ? {
         [`${prefijo}/nest`]: {
@@ -85,6 +93,8 @@ export default defineConfig(({ mode }) => {
             if ((cliente || externo) && !rutaCliente(req)) return false;
             return !esQa && /\/patrimonial\/emit|\/riesgos-generales\/emision/.test(url) ? false : undefined;
           },
+          // Emisión: el plugin sesionSso ya leyó el cuerpo y le puso el productor/usuario de la sesión; se manda ese.
+          configure: (p) => { p.on('proxyReq', (proxyReq, req) => escribirCuerpoReescrito(proxyReq, req)); },
         },
       }
     : undefined;
@@ -100,11 +110,13 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       tailwindcss(),
+      sesionSso({ cfg: sso, sinBase, habilitado: !publico }),
       ...(nexus
         ? [proxyNexusFirmado({
             nexus, apiKey: env.NEXUS_API_KEY, secreto: env.COTIZACIONES_RC_SECRET || undefined, exigirFirma: produccion,
             habilitado: !publico, sinBase, esCliente: (req) => cliente || esExterno(req),
-            verificacion: { cproductor: Number(env.VITE_RCG_PLANES_CPRODUCTOR) || 80080 },
+            // El productor exigido en los bodies de emisión es el de la sesión (token o web): lo pone proxyNexus.
+            verificacion: { cproductor: sso.productorWeb }, sso,
           })]
         : []),
     ],
