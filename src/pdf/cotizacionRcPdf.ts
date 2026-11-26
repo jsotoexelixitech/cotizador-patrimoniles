@@ -298,7 +298,7 @@ export async function generarPdfRc(d: DatosPdfRc, a: AssetsPdfRc): Promise<Uint8
     filas.push(['Lesiones corporales o muerte de dos o más personas por ocurrencia', opts.map((o) => limiteContrato(deBase(o.limites[1]))), 'normal']);
     filas.push(['Límite máximo de responsabilidad por año póliza', montos((o) => o.limites[2]), 'bold']);
     if (opts.some((o) => o.ajuste !== 0)) filas.push(['Ajuste comercial de prima básica', montos((o) => o.ajuste), 'normal']);
-    if (opts.some((o) => o.ajusteMinimo !== 0)) filas.push(['Ajuste por prima mínima', montos((o) => o.ajusteMinimo), 'normal']);
+    // El ajuste para llegar a la prima mínima es interno: el cliente solo ve la prima a pagar (pedido La Mundial 26-nov).
     filas.push(['PRIMA A PAGAR', montos((o) => o.prima), 'blue']);
 
     const preparadas = filas.map(([titulo, valores, tipo]) => {
