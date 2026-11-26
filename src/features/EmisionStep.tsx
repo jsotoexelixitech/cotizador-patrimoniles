@@ -377,7 +377,7 @@ export function EmisionStep() {
           description={MODO_CLIENTE
             ? 'Guárdalo: con este código puedes volver durante 15 días, elegir una de las opciones y pagar en línea.'
             : 'Guardada en Exélixi Nexus. El cliente puede traerla con este código durante 15 días y pagar en línea.'}>
-          {rcg && (
+          {(rcg || esRc) && (
             <Button variant={MODO_CLIENTE ? 'primary' : 'secondary'} size="lg" onClick={() => { abrirConsulta(codigo); window.scrollTo({ top: 0 }); }}>
               <CreditCard size={15} /> {MODO_CLIENTE ? 'Elegir opción y pagar' : 'Mandar a pagar'}
             </Button>
